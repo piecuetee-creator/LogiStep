@@ -1,6 +1,7 @@
 import express from 'express';
 import path from 'path';
 import net from 'net';
+import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import { buildLoginPacket, buildLocationPacket, bytesToHex, buildAckPacket } from './src/utils/gt06.ts';
 
@@ -159,6 +160,24 @@ app.get('/api/health', (req, res) => {
     service: 'LogiStep GT06 Fleet Gateway',
     serverTime: new Date().toISOString(),
   });
+});
+
+// Download compiled Android APK directly
+app.get(['/LogiStep.apk', '/api/download-apk'], (req, res) => {
+  const possiblePaths = [
+    path.join(process.cwd(), 'LogiStep.apk'),
+    path.join(process.cwd(), 'public', 'LogiStep.apk'),
+    path.join(process.cwd(), 'dist', 'LogiStep.apk'),
+    path.join(process.cwd(), 'apk', 'LogiStep.apk'),
+  ];
+  for (const apkPath of possiblePaths) {
+    if (fs.existsSync(apkPath)) {
+      res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+      res.setHeader('Content-Disposition', 'attachment; filename="LogiStep.apk"');
+      return res.sendFile(apkPath);
+    }
+  }
+  res.status(404).json({ error: 'APK file not found' });
 });
 
 async function startServer() {

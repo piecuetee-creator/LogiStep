@@ -142,16 +142,26 @@ export const SettingsModal: React.FC<Props> = ({
       <div className="relative w-full max-w-lg bg-slate-900 border border-slate-700/80 rounded-3xl p-5 sm:p-6 shadow-2xl max-h-[92vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
-              <Settings className="w-5 h-5" />
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-xl overflow-hidden border border-amber-500/30 bg-slate-950 flex-shrink-0 shadow-md">
+              <img
+                src="/logo.png"
+                alt="LogiStep Logo"
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).src = '/icon.svg';
+                }}
+              />
             </div>
             <div>
-              <h3 className="text-base sm:text-lg font-bold text-white">
-                {t.configTitle}
+              <h3 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                <span>{t.configTitle}</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 font-mono">
+                  Series 99002
+                </span>
               </h3>
               <p className="text-xs text-slate-400">
-                Driver profile, Presence IMEI criteria (99002 series) & gateway
+                Driver profile, Presence IMEI criteria & gateway
               </p>
             </div>
           </div>

@@ -64,8 +64,15 @@ export const PWAInstallModal: React.FC<Props> = ({ lang }) => {
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-slate-950 shadow-lg shadow-emerald-500/20">
-                  <Smartphone className="w-5 h-5" />
+                <div className="w-12 h-12 rounded-2xl overflow-hidden border border-emerald-500/40 bg-slate-950 flex-shrink-0 shadow-lg shadow-emerald-500/20">
+                  <img
+                    src="/logo.png"
+                    alt="LogiStep Logo"
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).src = '/icon.svg';
+                    }}
+                  />
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-white flex items-center gap-1.5">
@@ -108,6 +115,25 @@ export const PWAInstallModal: React.FC<Props> = ({ lang }) => {
                 </button>
               </div>
             ) : null}
+
+            {/* Direct APK Download Button */}
+            <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <span className="text-xs font-bold text-white flex items-center gap-1.5 truncate">
+                  <Download className="w-3.5 h-3.5 text-amber-400" />
+                  Direct APK Package
+                </span>
+                <p className="text-[11px] text-slate-400 font-mono truncate">apk/LogiStep-release.apk</p>
+              </div>
+              <a
+                href="/apk/LogiStep-release.apk"
+                download="LogiStep-release.apk"
+                className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition-all shadow-md flex-shrink-0"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Download APK
+              </a>
+            </div>
 
             {/* Android Chrome 2-Step APK / WebApp Instructions */}
             <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex flex-col gap-2">

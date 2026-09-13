@@ -42,8 +42,15 @@ export const DriverStatusCard: React.FC<Props> = ({
       <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
         {/* Driver & Unit Info */}
         <div className="md:col-span-5 flex items-center gap-3.5 border-b md:border-b-0 md:border-r border-slate-800 pb-3 md:pb-0 md:pr-4">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-slate-800 to-slate-700 flex items-center justify-center text-amber-400 border border-slate-700 shadow-inner flex-shrink-0">
-            <Truck className="w-6 h-6" />
+          <div className="w-12 h-12 rounded-2xl overflow-hidden border border-amber-500/40 bg-slate-950 flex items-center justify-center shadow-lg shadow-amber-500/20 flex-shrink-0">
+            <img
+              src="/logo.png"
+              alt="LogiStep Logo"
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                (e.currentTarget as HTMLImageElement).src = '/icon.svg';
+              }}
+            />
           </div>
 
           <div className="min-w-0 flex-1">

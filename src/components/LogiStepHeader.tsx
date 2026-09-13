@@ -45,10 +45,17 @@ export const LogiStepHeader: React.FC<Props> = ({
         <div className="flex items-center justify-between gap-2">
           {/* Logo & Brand */}
           <div className="flex items-center gap-3">
-            <div className="relative flex items-center justify-center w-11 h-11 rounded-xl bg-gradient-to-br from-amber-500 via-orange-600 to-amber-700 shadow-lg shadow-amber-500/20 text-slate-950 font-black text-xl tracking-tighter border border-amber-400/40">
-              <span>LS</span>
+            <div className="relative flex items-center justify-center w-12 h-12 rounded-2xl overflow-hidden border border-amber-500/40 shadow-lg shadow-amber-500/20 bg-slate-950 flex-shrink-0 group">
+              <img
+                src="/logo.png"
+                alt="LogiStep Logo"
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).src = '/icon.svg';
+                }}
+              />
               {/* Telematics Pulse Dot */}
-              <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5">
+              <span className="absolute -top-0.5 -right-0.5 flex h-3.5 w-3.5 z-10">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500 border-2 border-slate-900"></span>
               </span>

@@ -62,8 +62,15 @@ export const TripHistoryModal: React.FC<Props> = ({
         {/* Header */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-800">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
-              <FileSpreadsheet className="w-5 h-5" />
+            <div className="w-11 h-11 rounded-2xl overflow-hidden border border-amber-500/40 bg-slate-950 flex-shrink-0 shadow-md">
+              <img
+                src="/logo.png"
+                alt="LogiStep Logo"
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).src = '/icon.svg';
+                }}
+              />
             </div>
             <div>
               <h3 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">

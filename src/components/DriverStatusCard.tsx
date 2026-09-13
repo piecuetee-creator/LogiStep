@@ -1,6 +1,7 @@
 import React from 'react';
 import { DriverProfile, Coordinates, LanguageCode, TripEventRecord } from '../types';
 import { UI_TEXT } from '../utils/i18n';
+import { validatePresenceImei } from '../utils/imei';
 import {
   User,
   Truck,
@@ -62,8 +63,14 @@ export const DriverStatusCard: React.FC<Props> = ({
               <span>•</span>
               <span className="truncate text-slate-400">{profile.transporter || 'VTP Logistics'}</span>
             </div>
-            <div className="text-[11px] text-slate-500 font-mono mt-0.5">
-              IMEI: <span className="text-amber-400/90 font-bold">{profile.imei}</span>
+            <div className="text-[11px] text-slate-500 font-mono mt-1 flex items-center gap-1.5 flex-wrap">
+              <span>IMEI:</span>
+              <span className="text-amber-400 font-bold tracking-wider">
+                {validatePresenceImei(profile.imei).formattedDisplay}
+              </span>
+              <span className="text-[9px] font-sans px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 font-semibold">
+                Presence 99002
+              </span>
             </div>
           </div>
         </div>

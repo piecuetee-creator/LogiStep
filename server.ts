@@ -15,7 +15,7 @@ let sequenceCounter = 1;
 // API route: Transmit GT06 packet to AVL server
 app.post('/api/transmit-gt06', async (req, res) => {
   const {
-    imei = '990031001045203',
+    imei = '990021001045203',
     speedCode = 101,
     isIgnitionOn = true, // UP = true (1), DOWN = false (0)
     latitude = 24.8732,

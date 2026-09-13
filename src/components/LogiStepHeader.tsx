@@ -1,6 +1,7 @@
 import React from 'react';
 import { TripDirection, LanguageCode, ConnectionStatus } from '../types';
 import { UI_TEXT } from '../utils/i18n';
+import { PWAInstallModal } from './PWAInstallModal';
 import {
   ArrowUpRight,
   ArrowDownLeft,
@@ -109,6 +110,9 @@ export const LogiStepHeader: React.FC<Props> = ({
                 پښتو
               </button>
             </div>
+
+            {/* Install APK / PWA Button */}
+            <PWAInstallModal lang={lang} />
 
             {/* Trip Sheet / History button */}
             <button

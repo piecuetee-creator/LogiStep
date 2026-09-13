@@ -23,22 +23,26 @@ import { SettingsModal } from './components/SettingsModal';
 import { playSuccessChime, playAlertTone } from './utils/audio';
 import { UI_TEXT } from './utils/i18n';
 import { buildLoginPacket, buildLocationPacket, bytesToHex } from './utils/gt06';
+import { transmitOverWebSocket } from './utils/websocket';
 import { ArrowUpRight, ArrowDownLeft, Shield, Radio, CheckCircle2 } from 'lucide-react';
 
 const DEFAULT_PROFILE: DriverProfile = {
   driverName: 'Khan Muhammad',
+  driverPhone: '03001045203',
   vehicleNumber: 'TLB-786',
   transporter: 'VTP Logistics Fleet',
   consignmentNo: 'CN-884920',
-  imei: '990031001045203', // 99003 series ID as requested by boss
+  companyCode: '1001',
+  employeeCode: '0452',
   serverDigits: '03',
+  imei: '990021001045203', // 99002 (5D) + company code (4D: 1001) + employee code (4D: 0452) + server (2D: 03)
 };
 
 const DEFAULT_SOCKET_CONFIG: SocketConfig = {
   tcpHost: 'avl.vtps.org',
   tcpPort: 5200,
   wsUrl: 'ws://avl.vtps.org:5200',
-  imei: '990031001045203',
+  imei: '990021001045203',
   useWebSocket: true,
   timeoutMs: 3500,
 };
@@ -68,12 +72,40 @@ export default function App() {
   // State: Driver profile & Socket config
   const [profile, setProfile] = useState<DriverProfile>(() => {
     const saved = localStorage.getItem('logistep_profile');
-    return saved ? JSON.parse(saved) : DEFAULT_PROFILE;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.imei && parsed.imei.startsWith('99003')) {
+          parsed.imei = parsed.imei.replace(/^99003/, '99002');
+        }
+        if (!parsed.companyCode || parsed.companyCode.length !== 4) parsed.companyCode = '1001';
+        if (!parsed.employeeCode || parsed.employeeCode.length !== 4) parsed.employeeCode = '0452';
+        if (!parsed.serverDigits || parsed.serverDigits.length !== 2) parsed.serverDigits = '03';
+        if (!parsed.imei || parsed.imei.length !== 15) {
+          parsed.imei = `99002${parsed.companyCode}${parsed.employeeCode}${parsed.serverDigits}`;
+        }
+        return parsed;
+      } catch {
+        return DEFAULT_PROFILE;
+      }
+    }
+    return DEFAULT_PROFILE;
   });
 
   const [socketConfig, setSocketConfig] = useState<SocketConfig>(() => {
     const saved = localStorage.getItem('logistep_config');
-    return saved ? JSON.parse(saved) : DEFAULT_SOCKET_CONFIG;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.imei && parsed.imei.startsWith('99003')) {
+          parsed.imei = parsed.imei.replace(/^99003/, '99002');
+        }
+        return parsed;
+      } catch {
+        return DEFAULT_SOCKET_CONFIG;
+      }
+    }
+    return DEFAULT_SOCKET_CONFIG;
   });
 
   // State: Coordinates
@@ -101,7 +133,7 @@ export default function App() {
       id: 'init-2',
       timestamp: new Date().toLocaleTimeString(),
       direction: 'INFO',
-      message: 'Active Gateway: avl.vtps.org:5200 • Series ID: 99003',
+      message: 'Active Gateway: avl.vtps.org:5200 • Presence Series ID: 99002',
     },
   ]);
 
@@ -234,12 +266,33 @@ export default function App() {
 
     addLog(
       'INFO',
-      `Starting transmission for Step ${step.id}: "${step.titleEn}" (Speed: ${speedCode} km/h, Ignition: ${isIgnitionOn ? 1 : 0})`
+      `Reporting Step ${step.id} to Socket: "${step.titleEn}" (Speed: ${speedCode} km/h, Ignition: ${isIgnitionOn ? 1 : 0}, IMEI: ${profile.imei})`
     );
 
     try {
       setConnectionStatus('SENDING_LOGIN');
 
+      // 1. Direct WebSocket reporting (as in presence app) if enabled
+      if (socketConfig.useWebSocket && socketConfig.wsUrl) {
+        transmitOverWebSocket({
+          wsUrl: socketConfig.wsUrl,
+          imei: profile.imei,
+          speedCode,
+          isIgnitionOn,
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+          timeoutMs: 2500,
+        }).then((wsResult) => {
+          if (wsResult.success) {
+            addLog('TX', `WebSocket Telematics Sent [Speed: ${speedCode} km/h]:`, wsResult.locationHex);
+            addLog('RX', `WebSocket ACK from ${socketConfig.wsUrl}:`, wsResult.rxHex);
+          } else {
+            addLog('INFO', `WebSocket channel note: ${wsResult.error}`);
+          }
+        }).catch(() => {});
+      }
+
+      // 2. Gateway TCP socket reporting to avl.vtps.org:5200
       const response = await fetch('/api/transmit-gt06', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

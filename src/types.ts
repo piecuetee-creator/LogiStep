@@ -43,11 +43,14 @@ export interface StepDefinition {
 
 export interface DriverProfile {
   driverName: string;
+  driverPhone?: string;
   vehicleNumber: string;
   transporter: string;
   consignmentNo: string;
-  imei: string;
+  companyCode?: string;
+  employeeCode?: string;
   serverDigits: string;
+  imei: string;
 }
 
 export interface SocketConfig {

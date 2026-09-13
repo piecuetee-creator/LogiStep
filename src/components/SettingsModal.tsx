@@ -16,8 +16,6 @@ import {
   Building2,
   BadgeCheck,
   Server,
-  Smartphone,
-  Download,
 } from 'lucide-react';
 
 interface Props {
@@ -462,35 +460,6 @@ export const SettingsModal: React.FC<Props> = ({
                   className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-sm text-slate-300 font-mono focus:outline-none focus:border-amber-500"
                 />
               </div>
-            </div>
-            {/* Android APK & Mobile Installation Card */}
-            <div className="p-3.5 rounded-xl bg-gradient-to-br from-emerald-950/40 via-slate-900 to-slate-950 border border-emerald-500/30 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-lg bg-emerald-500/20 text-emerald-400">
-                  <Smartphone className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
-                    Android APK / Home Screen App
-                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-mono">
-                      Offline Ready
-                    </span>
-                  </h4>
-                  <p className="text-[11px] text-slate-400">
-                    Install LogiStep directly onto driver Android devices via Chrome "Add to Home Screen"
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  window.dispatchEvent(new CustomEvent('open-pwa-install'));
-                }}
-                className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition-all shadow-md shadow-emerald-500/20 flex-shrink-0"
-              >
-                <Download className="w-3.5 h-3.5" />
-                Install APK
-              </button>
             </div>
           </div>
 

@@ -68,14 +68,17 @@ def build_apk():
     android:versionCode="1"
     android:versionName="1.0.0">
 
-    <uses-feature android:name="android.hardware.location.gps" android:required="true" />
+    <uses-sdk
+        android:minSdkVersion="21"
+        android:targetSdkVersion="34" />
+
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
     <uses-feature android:name="android.hardware.location.network" android:required="false" />
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application
@@ -203,9 +206,13 @@ public class MainActivity extends Activity {
 }
 ''')
 
-    android_jar = "/usr/lib/android-sdk/platforms/android-23/android.jar"
+    android_jar = "/opt/android-sdk/platforms/android-34/android.jar"
+    if not os.path.exists(android_jar):
+        android_jar = "/usr/lib/android-sdk/platforms/android-23/android.jar"
     if not os.path.exists(android_jar):
         raise FileNotFoundError(f"Missing android.jar at {android_jar}")
+
+    print(f"[*] Using Android SDK: {android_jar}")
 
     # 7. Generate R.java via aapt
     print("[*] Generating R.java via aapt...")
@@ -214,7 +221,9 @@ public class MainActivity extends Activity {
         "-J", gen_dir,
         "-M", manifest_path,
         "-S", res_dir,
-        "-I", android_jar
+        "-I", android_jar,
+        "--min-sdk-version", "21",
+        "--target-sdk-version", "34"
     ], cwd=work_dir)
 
     # 8. Compile Java sources with javac
@@ -246,7 +255,9 @@ public class MainActivity extends Activity {
         "-S", res_dir,
         "-A", assets_dir,
         "-I", android_jar,
-        "-F", base_apk
+        "-F", base_apk,
+        "--min-sdk-version", "21",
+        "--target-sdk-version", "34"
     ], cwd=work_dir)
 
     # 11. Add classes.dex into base.apk
@@ -278,7 +289,7 @@ public class MainActivity extends Activity {
             "-dname", "CN=LogiStep,OU=VTP,O=VTPFleet,C=US"
         ], cwd=work_dir)
 
-    # 14. Sign APK with apksigner
+    # 14. Sign APK with apksigner (enabling v1, v2, and v3)
     print("[*] Signing APK with apksigner...")
     signed_apk = os.path.join(work_dir, "LogiStep.apk")
     shutil.copy2(aligned_apk, signed_apk)
@@ -287,6 +298,9 @@ public class MainActivity extends Activity {
         "--ks", keystore_path,
         "--ks-pass", "pass:android",
         "--key-pass", "pass:android",
+        "--v1-signing-enabled", "true",
+        "--v2-signing-enabled", "true",
+        "--v3-signing-enabled", "true",
         signed_apk
     ], cwd=work_dir)
 

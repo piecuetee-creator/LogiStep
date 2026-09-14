@@ -10,7 +10,7 @@ export interface WebSocketTransmitResult {
 
 /**
  * Transmits GT06 binary packets directly over browser WebSocket
- * Matching the exact telematics presence workflow
+ * Matching the exact telematics fleet workflow
  */
 export async function transmitOverWebSocket(params: {
   wsUrl: string;

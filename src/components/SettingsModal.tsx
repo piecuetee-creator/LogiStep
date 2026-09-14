@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { DriverProfile, SocketConfig, LanguageCode } from '../types';
 import { UI_TEXT } from '../utils/i18n';
-import { buildPresenceImei, validatePresenceImei } from '../utils/imei';
+import { buildFleetImei, validateFleetImei } from '../utils/imei';
+import { sendLoginPacket, LoginHandshakeResult } from '../utils/androidBridge';
 import {
   Settings,
   X,
@@ -16,6 +17,8 @@ import {
   Building2,
   BadgeCheck,
   Server,
+  Radio,
+  Loader2,
 } from 'lucide-react';
 
 interface Props {
@@ -44,7 +47,7 @@ export const SettingsModal: React.FC<Props> = ({
   const [transporter, setTransporter] = useState(profile.transporter);
   const [consignmentNo, setConsignmentNo] = useState(profile.consignmentNo);
 
-  // Presence formula parameters: 99002 + Company Code (4D) + Employee Code (4D) + Server (2D)
+  // Fleet formula parameters: 99002 + Company Code (4D) + Employee Code (4D) + Server (2D)
   const [companyCode, setCompanyCode] = useState(profile.companyCode || '1001');
   const [employeeCode, setEmployeeCode] = useState(profile.employeeCode || '0452');
   const [serverDigits, setServerDigits] = useState(profile.serverDigits || '03');
@@ -54,21 +57,25 @@ export const SettingsModal: React.FC<Props> = ({
     ? profile.imei.replace(/^99003/, '99002')
     : profile.imei || '990021001045203';
   const [imei, setImei] = useState(initialImei);
-  const [autoSyncPresence, setAutoSyncPresence] = useState(true);
+  const [autoSyncFleet, setAutoSyncFleet] = useState(true);
 
   const [tcpHost, setTcpHost] = useState(socketConfig.tcpHost);
   const [tcpPort, setTcpPort] = useState(socketConfig.tcpPort.toString());
 
-  // Real-time IMEI validation against Presence criteria
-  const imeiCheck = validatePresenceImei(imei);
+  // Handshake test state
+  const [isTestingHandshake, setIsTestingHandshake] = useState(false);
+  const [handshakeResult, setHandshakeResult] = useState<LoginHandshakeResult | null>(null);
+
+  // Real-time IMEI validation against Fleet criteria
+  const imeiCheck = validateFleetImei(imei);
 
   // When auto-sync is on, recalculate IMEI using the 99002 formula: 99002 + Company (4D) + Employee (4D) + Server (2D)
-  const handleApplyPresencePattern = (
+  const handleApplyFleetPattern = (
     cCode?: string,
     eCode?: string,
     sDigits?: string
   ) => {
-    const calculated = buildPresenceImei({
+    const calculated = buildFleetImei({
       prefix: '99002',
       companyCode: cCode !== undefined ? cCode : companyCode,
       employeeCode: eCode !== undefined ? eCode : employeeCode,
@@ -80,32 +87,53 @@ export const SettingsModal: React.FC<Props> = ({
   const handleCompanyCodeChange = (val: string) => {
     const clean = val.replace(/\D/g, '').slice(0, 4);
     setCompanyCode(clean);
-    if (autoSyncPresence) {
-      handleApplyPresencePattern(clean, employeeCode, serverDigits);
+    if (autoSyncFleet) {
+      handleApplyFleetPattern(clean, employeeCode, serverDigits);
     }
   };
 
   const handleEmployeeCodeChange = (val: string) => {
     const clean = val.replace(/\D/g, '').slice(0, 4);
     setEmployeeCode(clean);
-    if (autoSyncPresence) {
-      handleApplyPresencePattern(companyCode, clean, serverDigits);
+    if (autoSyncFleet) {
+      handleApplyFleetPattern(companyCode, clean, serverDigits);
     }
   };
 
   const handleServerDigitsChange = (val: string) => {
     const clean = val.replace(/\D/g, '').slice(0, 2);
     setServerDigits(clean);
-    if (autoSyncPresence) {
-      handleApplyPresencePattern(companyCode, employeeCode, clean);
+    if (autoSyncFleet) {
+      handleApplyFleetPattern(companyCode, employeeCode, clean);
     }
   };
 
   const handleManualImeiChange = (val: string) => {
     setImei(val);
-    // If user manually edits, disengage auto-sync
-    if (autoSyncPresence) {
-      setAutoSyncPresence(false);
+    if (autoSyncFleet) {
+      setAutoSyncFleet(false);
+    }
+  };
+
+  const handleTestLoginPacket = async () => {
+    setIsTestingHandshake(true);
+    setHandshakeResult(null);
+    try {
+      const res = await sendLoginPacket({
+        imei: imei.trim(),
+        tcpHost: tcpHost.trim(),
+        tcpPort: parseInt(tcpPort, 10) || 5200,
+        timeoutMs: 3500,
+      });
+      setHandshakeResult(res);
+    } catch (e: any) {
+      setHandshakeResult({
+        success: false,
+        txLoginHex: '',
+        error: `Server handshake isn't possible: ${e?.message || 'Server offline'}`,
+      });
+    } finally {
+      setIsTestingHandshake(false);
     }
   };
 
@@ -141,7 +169,7 @@ export const SettingsModal: React.FC<Props> = ({
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-slate-800">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl overflow-hidden border border-amber-500/30 bg-slate-950 flex-shrink-0 shadow-md">
+            <div className="w-11 h-11 rounded-xl overflow-hidden border border-orange-500/40 bg-slate-950 flex-shrink-0 shadow-md">
               <img
                 src="/logo.png"
                 alt="LogiStep Logo"
@@ -154,12 +182,12 @@ export const SettingsModal: React.FC<Props> = ({
             <div>
               <h3 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
                 <span>{t.configTitle}</span>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 font-mono">
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-400 font-mono font-bold">
                   Series 99002
                 </span>
               </h3>
               <p className="text-xs text-slate-400">
-                Driver profile, Presence IMEI criteria & gateway
+                Driver profile, Fleet IMEI criteria & AVL gateway
               </p>
             </div>
           </div>
@@ -178,7 +206,7 @@ export const SettingsModal: React.FC<Props> = ({
         <form onSubmit={handleSave} className="flex-1 overflow-y-auto space-y-4 py-4 pr-1">
           {/* Section: Driver & Vehicle */}
           <div className="space-y-3 bg-slate-950/70 p-4 rounded-2xl border border-slate-800/80">
-            <div className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+            <div className="text-xs font-bold text-orange-400 uppercase tracking-wider flex items-center gap-1.5">
               <Truck className="w-3.5 h-3.5" />
               Fleet & Driver Identity
             </div>
@@ -192,7 +220,7 @@ export const SettingsModal: React.FC<Props> = ({
                 value={vehicleNumber}
                 onChange={(e) => setVehicleNumber(e.target.value)}
                 placeholder="e.g. TLB-786"
-                className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-sm font-bold text-white focus:outline-none focus:border-amber-500 font-mono"
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-sm font-bold text-white focus:outline-none focus:border-orange-500 font-mono"
               />
             </div>
 
@@ -206,13 +234,13 @@ export const SettingsModal: React.FC<Props> = ({
                   value={driverName}
                   onChange={(e) => setDriverName(e.target.value)}
                   placeholder="e.g. Khan Muhammad"
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-amber-500"
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-orange-500"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-medium text-slate-400 mb-1 flex items-center gap-1">
-                  <Phone className="w-3 h-3 text-amber-400" />
+                  <Phone className="w-3 h-3 text-orange-400" />
                   {t.driverPhoneLabel}
                 </label>
                 <input
@@ -220,7 +248,7 @@ export const SettingsModal: React.FC<Props> = ({
                   value={driverPhone}
                   onChange={(e) => setDriverPhone(e.target.value)}
                   placeholder="e.g. 03001045203"
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-sm font-mono text-white focus:outline-none focus:border-amber-500"
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-sm font-mono text-white focus:outline-none focus:border-orange-500"
                 />
               </div>
             </div>
@@ -235,7 +263,7 @@ export const SettingsModal: React.FC<Props> = ({
                   value={transporter}
                   onChange={(e) => setTransporter(e.target.value)}
                   placeholder="e.g. VTP Logistics Fleet"
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-amber-500"
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-orange-500"
                 />
               </div>
 
@@ -248,26 +276,26 @@ export const SettingsModal: React.FC<Props> = ({
                   value={consignmentNo}
                   onChange={(e) => setConsignmentNo(e.target.value)}
                   placeholder="e.g. BILTY-99201"
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-amber-500 font-mono"
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-orange-500 font-mono"
                 />
               </div>
             </div>
           </div>
 
-          {/* Section: Telematics IMEI / Presence Criteria (99002 + Company + Employee + Server) */}
+          {/* Section: Telematics IMEI / Fleet Criteria (99002 + Company + Employee + Server) */}
           <div className="space-y-3 bg-slate-950/70 p-4 rounded-2xl border border-slate-800/80">
             <div className="flex items-center justify-between">
-              <div className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
+              <div className="text-xs font-bold text-orange-400 uppercase tracking-wider flex items-center gap-1.5">
                 <Shield className="w-3.5 h-3.5" />
-                Presence IMEI Formula (99002 Series)
+                Fleet IMEI Formula (99002 Series)
               </div>
               <button
                 type="button"
                 onClick={() => {
-                  setAutoSyncPresence(true);
-                  handleApplyPresencePattern();
+                  setAutoSyncFleet(true);
+                  handleApplyFleetPattern();
                 }}
-                className="flex items-center gap-1 text-[11px] font-bold text-amber-400 hover:text-amber-300 transition-colors"
+                className="flex items-center gap-1 text-[11px] font-bold text-orange-400 hover:text-orange-300 transition-colors"
                 title="Regenerate IMEI using 99002 + Company + Employee + Server"
               >
                 <Sparkles className="w-3 h-3" />
@@ -276,21 +304,21 @@ export const SettingsModal: React.FC<Props> = ({
             </div>
 
             {/* Formula Banner */}
-            <div className="px-3 py-2 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-[11px] text-emerald-300 flex items-center justify-between">
+            <div className="px-3 py-2 rounded-xl bg-orange-950/40 border border-orange-500/30 text-[11px] text-orange-300 flex items-center justify-between">
               <span className="font-mono font-semibold">
-                Formula: <span className="text-emerald-400 font-bold">99002</span> (5D) + Company (4D) + Employee (4D) + Server (2D)
+                Formula: <span className="text-orange-400 font-bold">99002</span> (5D) + Company (4D) + Employee (4D) + Server (2D)
               </span>
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold">
-                Not 99003
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-300 font-bold">
+                15 Digits
               </span>
             </div>
 
             {/* Criteria Breakdown Pillars */}
             <div className="grid grid-cols-4 gap-2 bg-slate-900/90 p-2.5 rounded-xl border border-slate-800 text-center font-mono">
               {/* Pillar 1: Prefix 99002 */}
-              <div className="p-1.5 rounded-lg bg-slate-950 border border-emerald-500/30">
-                <span className="block text-[10px] text-emerald-400 font-sans font-semibold">Series (5D)</span>
-                <span className="text-xs font-bold text-emerald-400">99002</span>
+              <div className="p-1.5 rounded-lg bg-slate-950 border border-orange-500/30">
+                <span className="block text-[10px] text-orange-400 font-sans font-semibold">Series (5D)</span>
+                <span className="text-xs font-bold text-orange-400">99002</span>
               </div>
 
               {/* Pillar 2: Company Code (4 digits) */}
@@ -354,12 +382,12 @@ export const SettingsModal: React.FC<Props> = ({
                 <label className="flex items-center gap-1.5 text-[11px] text-slate-400 cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={autoSyncPresence}
+                    checked={autoSyncFleet}
                     onChange={(e) => {
-                      setAutoSyncPresence(e.target.checked);
-                      if (e.target.checked) handleApplyPresencePattern();
+                      setAutoSyncFleet(e.target.checked);
+                      if (e.target.checked) handleApplyFleetPattern();
                     }}
-                    className="w-3.5 h-3.5 rounded bg-slate-800 border-slate-700 text-amber-500 focus:ring-0"
+                    className="w-3.5 h-3.5 rounded bg-slate-800 border-slate-700 text-orange-500 focus:ring-0"
                   />
                   <span>Auto-sync with 99002 Formula</span>
                 </label>
@@ -373,15 +401,15 @@ export const SettingsModal: React.FC<Props> = ({
                 placeholder="990021001045203"
                 className={`w-full px-3 py-2 bg-slate-900 border rounded-xl text-sm font-mono font-bold focus:outline-none transition-colors ${
                   imeiCheck.isValid
-                    ? 'border-emerald-500/50 text-emerald-300 focus:border-emerald-500'
-                    : 'border-amber-500/50 text-amber-300 focus:border-amber-500'
+                    ? 'border-orange-500/50 text-orange-300 focus:border-orange-500'
+                    : 'border-red-500/50 text-red-300 focus:border-red-500'
                 }`}
               />
 
               {/* Color Segments Visualizer */}
               {imei.length === 15 && (
                 <div className="mt-1.5 flex items-center justify-between px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 text-[11px] font-mono">
-                  <span className="text-emerald-400 font-bold" title="Series Prefix (5 digits)">
+                  <span className="text-orange-400 font-bold" title="Series Prefix (5 digits)">
                     {imei.slice(0, 5)}
                   </span>
                   <span className="text-slate-600">+</span>
@@ -407,13 +435,13 @@ export const SettingsModal: React.FC<Props> = ({
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5 text-xs">
                     {imeiCheck.isValid ? (
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                      <CheckCircle2 className="w-3.5 h-3.5 text-orange-400" />
                     ) : (
-                      <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                      <AlertTriangle className="w-3.5 h-3.5 text-red-400" />
                     )}
                     <span
                       className={`font-semibold ${
-                        imeiCheck.isValid ? 'text-emerald-400' : 'text-amber-400'
+                        imeiCheck.isValid ? 'text-orange-400' : 'text-red-400'
                       }`}
                     >
                       {imeiCheck.message}
@@ -430,7 +458,7 @@ export const SettingsModal: React.FC<Props> = ({
                     <Binary className="w-3 h-3" />
                     GT06 BCD:
                   </span>
-                  <span className="text-amber-400/90 font-bold">{imeiCheck.bcdHex}</span>
+                  <span className="text-orange-400/90 font-bold">{imeiCheck.bcdHex}</span>
                 </div>
               </div>
             </div>
@@ -445,7 +473,7 @@ export const SettingsModal: React.FC<Props> = ({
                   type="text"
                   value={tcpHost}
                   onChange={(e) => setTcpHost(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-sm text-slate-300 font-mono focus:outline-none focus:border-amber-500"
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-sm text-slate-300 font-mono focus:outline-none focus:border-orange-500"
                 />
               </div>
 
@@ -457,9 +485,72 @@ export const SettingsModal: React.FC<Props> = ({
                   type="text"
                   value={tcpPort}
                   onChange={(e) => setTcpPort(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-sm text-slate-300 font-mono focus:outline-none focus:border-amber-500"
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-sm text-slate-300 font-mono focus:outline-none focus:border-orange-500"
                 />
               </div>
+            </div>
+
+            {/* Send Login Packet & Verify Server Handshake Test */}
+            <div className="pt-2 border-t border-slate-800/80">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                  <Radio className="w-3.5 h-3.5 text-orange-400" />
+                  <span>Test Login Handshake (GT06 0x01)</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleTestLoginPacket}
+                  disabled={isTestingHandshake || !imeiCheck.isValid}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-500/15 hover:bg-orange-500/25 border border-orange-500/30 text-orange-400 hover:text-orange-300 font-bold text-xs transition-colors disabled:opacity-50"
+                >
+                  {isTestingHandshake ? (
+                    <>
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      <span>Sending...</span>
+                    </>
+                  ) : (
+                    <span>Send Login Packet</span>
+                  )}
+                </button>
+              </div>
+
+              {/* Handshake Result Alert */}
+              {handshakeResult && (
+                <div
+                  className={`mt-2.5 p-3 rounded-xl border text-xs ${
+                    handshakeResult.success
+                      ? 'bg-orange-950/40 border-orange-500/40 text-orange-200'
+                      : 'bg-red-950/50 border-red-500/50 text-red-200'
+                  }`}
+                >
+                  <div className="font-bold flex items-center gap-1.5">
+                    {handshakeResult.success ? (
+                      <>
+                        <CheckCircle2 className="w-4 h-4 text-orange-400 flex-shrink-0" />
+                        <span>{handshakeResult.message || 'Server handshake successful!'}</span>
+                      </>
+                    ) : (
+                      <>
+                        <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                        <span>{handshakeResult.error || "Server handshake isn't possible: Server is offline"}</span>
+                      </>
+                    )}
+                  </div>
+                  {handshakeResult.txLoginHex && (
+                    <div className="mt-2 text-[10px] font-mono text-slate-400 bg-slate-950/80 p-1.5 rounded border border-slate-800 break-all">
+                      <span className="text-slate-500">TX Login: </span>
+                      {handshakeResult.txLoginHex}
+                      {handshakeResult.rxHex && (
+                        <>
+                          <br />
+                          <span className="text-orange-400">RX ACK: </span>
+                          {handshakeResult.rxHex}
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -475,7 +566,7 @@ export const SettingsModal: React.FC<Props> = ({
             <button
               type="submit"
               disabled={!imeiCheck.isValid}
-              className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed text-slate-950 font-black text-xs transition-colors shadow-lg shadow-amber-500/20"
+              className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-400 disabled:opacity-50 disabled:cursor-not-allowed text-slate-950 font-black text-xs transition-colors shadow-lg shadow-orange-500/20"
             >
               <Save className="w-4 h-4" />
               <span>{t.saveConfig}</span>

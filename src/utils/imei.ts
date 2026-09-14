@@ -1,7 +1,7 @@
 /**
- * Presence App IMEI Pattern & Criteria Utility
+ * Fleet App IMEI Pattern & Criteria Utility
  * 
- * Presence Criteria Formula:
+ * Fleet Criteria Formula:
  * 99002 + Company Code (4 digits) + Employee Code (4 digits) + Server (2 digits)
  * Total: Exactly 15 numeric digits (GT06 standard telematics IMEI)
  * 
@@ -32,10 +32,10 @@ export interface ImeiCriteriaCheck {
 }
 
 /**
- * Builds a 15-digit IMEI according to the Presence criteria pattern:
+ * Builds a 15-digit IMEI according to the Fleet criteria pattern:
  * 99002 + Company Code (4D) + Employee Code (4D) + Server (2D)
  */
-export function buildPresenceImei(params: {
+export function buildFleetImei(params: {
   companyCode?: string;
   employeeCode?: string;
   serverDigits?: string;
@@ -60,10 +60,10 @@ export function buildPresenceImei(params: {
 }
 
 /**
- * Validates any IMEI string against the Presence criteria pattern:
+ * Validates any IMEI string against the Fleet criteria pattern:
  * 99002 + Company Code (4D) + Employee Code (4D) + Server (2D)
  */
-export function validatePresenceImei(imei: string): ImeiCriteriaCheck {
+export function validateFleetImei(imei: string): ImeiCriteriaCheck {
   const clean = (imei || '').trim();
   const digitsOnly = clean.replace(/\D/g, '');
 
@@ -73,11 +73,6 @@ export function validatePresenceImei(imei: string): ImeiCriteriaCheck {
   const has99002Series = clean.startsWith('99002');
 
   const series = clean.slice(0, 5);
-  // Default slices if 15 digits:
-  // [0..5]   = 99002 (5 digits)
-  // [5..9]   = Company Code (4 digits)
-  // [9..13]  = Employee Code (4 digits)
-  // [13..15] = Server (2 digits)
   const companyCode = clean.length >= 9 ? clean.slice(5, 9) : clean.slice(5);
   const employeeCode = clean.length >= 13 ? clean.slice(9, 13) : clean.slice(9);
   const serverCode = clean.length === 15 ? clean.slice(13, 15) : '';
@@ -94,7 +89,7 @@ export function validatePresenceImei(imei: string): ImeiCriteriaCheck {
     ? `${clean.slice(0, 5)} ${clean.slice(5, 9)} ${clean.slice(9, 13)} ${clean.slice(13, 15)}`
     : clean;
 
-  let message = 'Valid Presence IMEI';
+  let message = 'Valid Fleet IMEI';
   let isValid = true;
 
   if (!clean) {
@@ -115,11 +110,11 @@ export function validatePresenceImei(imei: string): ImeiCriteriaCheck {
       message = `15-digit GT06 compliant (Series: ${series})`;
     } else {
       isValid = false;
-      message = "IMEI must begin with Presence '99002' series";
+      message = "IMEI must begin with '99002' series";
     }
   } else {
     isValid = true;
-    message = 'Presence Criteria Met: 99002 + Company (4D) + Employee (4D) + Server (2D)';
+    message = 'Fleet Criteria Met: 99002 + Company (4D) + Employee (4D) + Server (2D)';
   }
 
   return {

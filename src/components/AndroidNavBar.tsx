@@ -34,13 +34,13 @@ export const AndroidNavBar: React.FC<Props> = ({
         onClick={() => handleTabClick('steps')}
         className={`flex flex-col items-center gap-1 py-1.5 px-3 rounded-2xl transition-all active:scale-95 ${
           activeTab === 'steps'
-            ? 'text-amber-400 font-bold'
+            ? 'text-orange-400 font-bold'
             : 'text-slate-400 hover:text-slate-200 font-medium'
         }`}
       >
         <div
           className={`w-9 h-7 rounded-xl flex items-center justify-center transition-colors ${
-            activeTab === 'steps' ? 'bg-amber-500/20' : 'bg-transparent'
+            activeTab === 'steps' ? 'bg-orange-500/20' : 'bg-transparent'
           }`}
         >
           <Truck className="w-5 h-5" />
@@ -53,13 +53,13 @@ export const AndroidNavBar: React.FC<Props> = ({
         onClick={() => handleTabClick('location')}
         className={`flex flex-col items-center gap-1 py-1.5 px-3 rounded-2xl transition-all active:scale-95 ${
           activeTab === 'location'
-            ? 'text-amber-400 font-bold'
+            ? 'text-orange-400 font-bold'
             : 'text-slate-400 hover:text-slate-200 font-medium'
         }`}
       >
         <div
           className={`w-9 h-7 rounded-xl flex items-center justify-center transition-colors ${
-            activeTab === 'location' ? 'bg-amber-500/20' : 'bg-transparent'
+            activeTab === 'location' ? 'bg-orange-500/20' : 'bg-transparent'
           }`}
         >
           <MapPin className="w-5 h-5" />
@@ -72,18 +72,18 @@ export const AndroidNavBar: React.FC<Props> = ({
         onClick={() => handleTabClick('history')}
         className={`relative flex flex-col items-center gap-1 py-1.5 px-3 rounded-2xl transition-all active:scale-95 ${
           activeTab === 'history'
-            ? 'text-amber-400 font-bold'
+            ? 'text-orange-400 font-bold'
             : 'text-slate-400 hover:text-slate-200 font-medium'
         }`}
       >
         <div
           className={`relative w-9 h-7 rounded-xl flex items-center justify-center transition-colors ${
-            activeTab === 'history' ? 'bg-amber-500/20' : 'bg-transparent'
+            activeTab === 'history' ? 'bg-orange-500/20' : 'bg-transparent'
           }`}
         >
           <History className="w-5 h-5" />
           {tripRecordsCount > 0 && (
-            <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-amber-500 text-slate-950 font-black text-[9px] flex items-center justify-center">
+            <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-orange-500 text-slate-950 font-black text-[9px] flex items-center justify-center">
               {tripRecordsCount}
             </span>
           )}
@@ -96,13 +96,13 @@ export const AndroidNavBar: React.FC<Props> = ({
         onClick={() => handleTabClick('logs')}
         className={`flex flex-col items-center gap-1 py-1.5 px-3 rounded-2xl transition-all active:scale-95 ${
           activeTab === 'logs'
-            ? 'text-amber-400 font-bold'
+            ? 'text-orange-400 font-bold'
             : 'text-slate-400 hover:text-slate-200 font-medium'
         }`}
       >
         <div
           className={`w-9 h-7 rounded-xl flex items-center justify-center transition-colors ${
-            activeTab === 'logs' ? 'bg-amber-500/20' : 'bg-transparent'
+            activeTab === 'logs' ? 'bg-orange-500/20' : 'bg-transparent'
           }`}
         >
           <Terminal className="w-5 h-5" />
@@ -115,13 +115,13 @@ export const AndroidNavBar: React.FC<Props> = ({
         onClick={() => handleTabClick('settings')}
         className={`flex flex-col items-center gap-1 py-1.5 px-3 rounded-2xl transition-all active:scale-95 ${
           activeTab === 'settings'
-            ? 'text-amber-400 font-bold'
+            ? 'text-orange-400 font-bold'
             : 'text-slate-400 hover:text-slate-200 font-medium'
         }`}
       >
         <div
           className={`w-9 h-7 rounded-xl flex items-center justify-center transition-colors ${
-            activeTab === 'settings' ? 'bg-amber-500/20' : 'bg-transparent'
+            activeTab === 'settings' ? 'bg-orange-500/20' : 'bg-transparent'
           }`}
         >
           <Settings className="w-5 h-5" />

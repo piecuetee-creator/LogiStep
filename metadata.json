@@ -1,6 +1,6 @@
 {
-  "name": "LogiStep - VTP Fleet Presence & Trip Tracking",
-  "description": "Professional 10-step logistics trip progress and fleet presence tracker with GT06 AVL protocol telemetry, UP/DOWN trip direction, and trilingual support (English, Urdu, Pashto).",
+  "name": "LogiStep - VTP Fleet Trip Tracking",
+  "description": "Professional 10-step logistics trip progress and fleet tracker with GT06 AVL protocol telemetry, UP/DOWN trip direction, and trilingual support (English, Urdu, Pashto).",
   "requestFramePermissions": ["geolocation"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

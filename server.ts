@@ -13,6 +13,93 @@ app.use(express.json());
 // In-memory counter for sequence numbers
 let sequenceCounter = 1;
 
+// API route: Dedicated GT06 Login handshake test
+app.post('/api/test-login', async (req, res) => {
+  const {
+    imei = '990021001045203',
+    tcpHost = 'avl.vtps.org',
+    tcpPort = 5200,
+    timeoutMs = 3000,
+  } = req.body;
+
+  const serial = sequenceCounter++;
+  const loginPacket = buildLoginPacket(imei, serial);
+  const txLoginHex = bytesToHex(loginPacket);
+
+  try {
+    const tcpResult = await new Promise<{
+      connected: boolean;
+      rxHex?: string;
+      error?: string;
+    }>((resolve) => {
+      const socket = new net.Socket();
+      let isResolved = false;
+
+      const timer = setTimeout(() => {
+        if (!isResolved) {
+          isResolved = true;
+          socket.destroy();
+          resolve({
+            connected: false,
+            error: `Connection timed out after ${timeoutMs}ms`,
+          });
+        }
+      }, timeoutMs);
+
+      socket.connect(Number(tcpPort), tcpHost, () => {
+        socket.write(Buffer.from(loginPacket));
+      });
+
+      socket.on('data', (chunk) => {
+        if (!isResolved) {
+          isResolved = true;
+          clearTimeout(timer);
+          socket.end();
+          resolve({
+            connected: true,
+            rxHex: bytesToHex(new Uint8Array(chunk)),
+          });
+        }
+      });
+
+      socket.on('error', (err) => {
+        if (!isResolved) {
+          isResolved = true;
+          clearTimeout(timer);
+          resolve({
+            connected: false,
+            error: err.message,
+          });
+        }
+      });
+    });
+
+    if (tcpResult.connected) {
+      return res.json({
+        success: true,
+        mode: 'LIVE_TCP',
+        txLoginHex,
+        rxHex: tcpResult.rxHex,
+        message: `Handshake successful. Server ACK received from ${tcpHost}:${tcpPort}`,
+      });
+    } else {
+      return res.json({
+        success: false,
+        mode: 'SERVER_OFFLINE',
+        txLoginHex,
+        error: `Server handshake isn't possible: Server at ${tcpHost}:${tcpPort} is offline or unreachable (${tcpResult.error})`,
+      });
+    }
+  } catch (err: any) {
+    return res.json({
+      success: false,
+      mode: 'SERVER_OFFLINE',
+      txLoginHex,
+      error: `Server handshake isn't possible: ${err.message}`,
+    });
+  }
+});
+
 // API route: Transmit GT06 packet to AVL server
 app.post('/api/transmit-gt06', async (req, res) => {
   const {
@@ -103,6 +190,7 @@ app.post('/api/transmit-gt06', async (req, res) => {
     if (tcpResult.connected) {
       return res.json({
         success: true,
+        handshakeSuccess: true,
         mode: 'LIVE_TCP',
         message: `Successfully transmitted to ${tcpHost}:${tcpPort} via raw GT06 TCP`,
         imei,
@@ -116,13 +204,14 @@ app.post('/api/transmit-gt06', async (req, res) => {
         timestamp: new Date().toISOString(),
       });
     } else {
-      // If external network blocked port 5200 (common in containerized sandboxes),
-      // we generate a verified synthetic protocol ACK so the driver UI continues seamlessly
+      // Server is offline
       const syntheticAck = bytesToHex(buildAckPacket(0x01, serial));
       return res.json({
         success: true,
-        mode: 'SIMULATED_HANDSHAKE',
-        note: `Target ${tcpHost}:${tcpPort} unreachable (${tcpResult.error}). Protocol packets validated & ACK simulated.`,
+        handshakeSuccess: false,
+        handshakeError: `Server handshake isn't possible: Server at ${tcpHost}:${tcpPort} is offline or unreachable (${tcpResult.error})`,
+        mode: 'OFFLINE_PERSISTED',
+        note: `Server handshake isn't possible: Server is offline. Telemetry saved to offline queue.`,
         imei,
         stepId,
         speedCode,
@@ -138,8 +227,10 @@ app.post('/api/transmit-gt06', async (req, res) => {
     const syntheticAck = bytesToHex(buildAckPacket(0x01, serial));
     return res.json({
       success: true,
-      mode: 'OFFLINE_CACHE',
-      note: `Network exception (${err.message}). Protocol verified locally.`,
+      handshakeSuccess: false,
+      handshakeError: `Server handshake isn't possible: ${err.message}`,
+      mode: 'OFFLINE_PERSISTED',
+      note: `Server handshake isn't possible: Network error. Telemetry saved to offline queue.`,
       imei,
       stepId,
       speedCode,

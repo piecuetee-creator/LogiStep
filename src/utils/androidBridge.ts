@@ -21,6 +21,116 @@ export interface TransmitResponse {
   rxHex: string;
   note?: string;
   error?: string;
+  handshakeError?: string;
+}
+
+export interface LoginHandshakeResult {
+  success: boolean;
+  mode?: 'LIVE_ANDROID_TCP' | 'LIVE_SERVER_TCP' | 'SERVER_OFFLINE';
+  txLoginHex: string;
+  rxHex?: string;
+  error?: string;
+  message?: string;
+}
+
+/**
+ * Dedicated login packet transmitter to verify server handshake
+ * If server is offline or unreachable, returns "Server handshake isn't possible"
+ */
+export async function sendLoginPacket(params: {
+  imei: string;
+  tcpHost: string;
+  tcpPort: number;
+  timeoutMs?: number;
+}): Promise<LoginHandshakeResult> {
+  const serialNo = Math.floor(Math.random() * 65530) + 1;
+  const loginPacket = buildLoginPacket(params.imei, serialNo);
+  const txLoginHex = bytesToHex(loginPacket);
+  const timeout = params.timeoutMs || 3000;
+
+  // 1. Try Native Android raw Java Socket if available
+  if (typeof (window as any).AndroidBridge?.sendTcp === 'function') {
+    try {
+      const rawJson = (window as any).AndroidBridge.sendTcp(
+        params.tcpHost,
+        params.tcpPort,
+        txLoginHex,
+        "", // locHex empty for login test
+        timeout
+      );
+      const parsed = typeof rawJson === 'string' ? JSON.parse(rawJson) : rawJson;
+
+      if (parsed && parsed.success) {
+        triggerHapticFeedback(45);
+        return {
+          success: true,
+          mode: 'LIVE_ANDROID_TCP',
+          txLoginHex,
+          rxHex: parsed.rxHex || '78 78 05 01 (ACK)',
+          message: `Handshake successful: Server ACK received from ${params.tcpHost}:${params.tcpPort}`,
+        };
+      } else {
+        const errorDetail = parsed?.error || 'Connection refused';
+        return {
+          success: false,
+          mode: 'SERVER_OFFLINE',
+          txLoginHex,
+          error: `Server handshake isn't possible: Server at ${params.tcpHost}:${params.tcpPort} is offline or unreachable (${errorDetail})`,
+        };
+      }
+    } catch (e: any) {
+      return {
+        success: false,
+        mode: 'SERVER_OFFLINE',
+        txLoginHex,
+        error: `Server handshake isn't possible: ${e?.message || 'Server offline'}`,
+      };
+    }
+  }
+
+  // 2. Try Web API proxy
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeout + 500);
+
+    const response = await fetch('/api/test-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        imei: params.imei,
+        tcpHost: params.tcpHost,
+        tcpPort: params.tcpPort,
+        timeoutMs: timeout,
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+
+    const data = await response.json();
+    if (data && data.success) {
+      return {
+        success: true,
+        mode: 'LIVE_SERVER_TCP',
+        txLoginHex: data.txLoginHex || txLoginHex,
+        rxHex: data.rxHex,
+        message: data.message || `Handshake successful. Server ACK received.`,
+      };
+    } else {
+      return {
+        success: false,
+        mode: 'SERVER_OFFLINE',
+        txLoginHex: data?.txLoginHex || txLoginHex,
+        error: data?.error || `Server handshake isn't possible: Server at ${params.tcpHost}:${params.tcpPort} is offline or unreachable.`,
+      };
+    }
+  } catch (err: any) {
+    return {
+      success: false,
+      mode: 'SERVER_OFFLINE',
+      txLoginHex,
+      error: `Server handshake isn't possible: Server at ${params.tcpHost}:${params.tcpPort} is offline or unreachable (${err?.message || 'Connection failed'}).`,
+    };
+  }
 }
 
 /**

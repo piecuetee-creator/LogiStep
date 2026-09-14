@@ -103,11 +103,11 @@ export const TripActionButtons: React.FC<Props> = ({
             }
           > = {
             1: {
-              border: 'border-emerald-500/40 hover:border-emerald-400',
-              activeBg: 'from-emerald-950/50 via-slate-900/90 to-slate-900',
-              numBadge: 'bg-emerald-500 text-slate-950',
-              speedBadge: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
-              accentText: 'text-emerald-400',
+              border: 'border-orange-500/40 hover:border-orange-400',
+              activeBg: 'from-orange-950/50 via-slate-900/90 to-slate-900',
+              numBadge: 'bg-orange-500 text-slate-950 font-black',
+              speedBadge: 'bg-orange-500/15 text-orange-300 border-orange-500/30',
+              accentText: 'text-orange-400',
             },
             2: {
               border: 'border-teal-500/40 hover:border-teal-400',
@@ -166,11 +166,11 @@ export const TripActionButtons: React.FC<Props> = ({
               accentText: 'text-orange-400',
             },
             10: {
-              border: 'border-emerald-400 hover:border-emerald-300',
-              activeBg: 'from-emerald-950/70 via-slate-900/90 to-slate-900',
-              numBadge: 'bg-emerald-400 text-slate-950',
-              speedBadge: 'bg-emerald-400/20 text-emerald-300 border-emerald-400/40',
-              accentText: 'text-emerald-400',
+              border: 'border-orange-400 hover:border-orange-300',
+              activeBg: 'from-orange-950/70 via-slate-900/90 to-slate-900',
+              numBadge: 'bg-orange-400 text-slate-950 font-black',
+              speedBadge: 'bg-orange-400/20 text-orange-300 border-orange-400/40',
+              accentText: 'text-orange-400',
             },
           };
 
@@ -186,7 +186,7 @@ export const TripActionButtons: React.FC<Props> = ({
                 style.border
               } bg-gradient-to-br ${style.activeBg} ${
                 isMarked
-                  ? 'ring-2 ring-emerald-500/40 shadow-lg shadow-emerald-950/30'
+                  ? 'ring-2 ring-orange-500/40 shadow-lg shadow-orange-950/30'
                   : isNext
                   ? 'ring-2 ring-amber-400/60 shadow-xl shadow-amber-950/40 animate-pulse'
                   : 'hover:shadow-lg'
@@ -208,7 +208,7 @@ export const TripActionButtons: React.FC<Props> = ({
                   </span>
 
                   {isMarked && (
-                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-orange-500/20 text-orange-400 border border-orange-500/30">
                       <CheckCircle2 className="w-3 h-3" />
                       Marked
                     </span>
@@ -238,7 +238,7 @@ export const TripActionButtons: React.FC<Props> = ({
               {/* Bottom: Action Status Strip */}
               <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between text-xs">
                 {lastRecordForThisStep ? (
-                  <span className="text-[11px] text-emerald-400 font-medium flex items-center gap-1">
+                  <span className="text-[11px] text-orange-400 font-medium flex items-center gap-1">
                     <span>Logged at {lastRecordForThisStep.formattedDateTime.split(' ')[1]}</span>
                     <span>({lastRecordForThisStep.direction})</span>
                   </span>

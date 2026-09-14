@@ -63,7 +63,7 @@ export const TripHistoryModal: React.FC<Props> = ({
         {/* Header */}
         <div className="flex items-center justify-between pb-4 border-b border-slate-800">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl overflow-hidden border border-amber-500/40 bg-slate-950 flex-shrink-0 shadow-md">
+            <div className="w-11 h-11 rounded-2xl overflow-hidden border border-orange-500/40 bg-slate-950 flex-shrink-0 shadow-md">
               <img
                 src="/logo.png"
                 alt="LogiStep Logo"
@@ -76,7 +76,7 @@ export const TripHistoryModal: React.FC<Props> = ({
             <div>
               <h3 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
                 <span>{t.tripTimeline}</span>
-                <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-amber-400 font-mono">
+                <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-orange-400 font-mono font-bold">
                   {records.length} / 10 Steps
                 </span>
               </h3>
@@ -127,7 +127,7 @@ export const TripHistoryModal: React.FC<Props> = ({
               <button
                 type="button"
                 onClick={handleCopySummary}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition-colors shadow-sm"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-500 hover:bg-orange-400 text-slate-950 font-bold text-xs transition-colors shadow-sm"
               >
                 {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                 <span>{copied ? 'Copied to Clipboard!' : 'Copy WhatsApp Report'}</span>
@@ -163,7 +163,7 @@ export const TripHistoryModal: React.FC<Props> = ({
                 return (
                   <div key={rec.id} className="relative group">
                     {/* Node Dot */}
-                    <div className="absolute -left-[31px] sm:-left-[39px] top-1.5 w-6 h-6 rounded-full bg-slate-900 border-2 border-emerald-500 flex items-center justify-center text-emerald-400 shadow-md">
+                    <div className="absolute -left-[31px] sm:-left-[39px] top-1.5 w-6 h-6 rounded-full bg-slate-900 border-2 border-orange-500 flex items-center justify-center text-orange-400 shadow-md">
                       <span className="text-[10px] font-black">{rec.stepId}</span>
                     </div>
 
@@ -177,7 +177,7 @@ export const TripHistoryModal: React.FC<Props> = ({
                           <span
                             className={`text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-0.5 ${
                               rec.direction === 'UP'
-                                ? 'bg-emerald-500/20 text-emerald-300'
+                                ? 'bg-orange-500/20 text-orange-300'
                                 : 'bg-amber-500/20 text-amber-300'
                             }`}
                           >
@@ -198,12 +198,12 @@ export const TripHistoryModal: React.FC<Props> = ({
                       {/* Location & Speed */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-slate-400 mt-2">
                         <div className="flex items-center gap-1.5 truncate">
-                          <MapPin className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+                          <MapPin className="w-3.5 h-3.5 text-orange-400 flex-shrink-0" />
                           <span className="truncate text-slate-300">{rec.locationName}</span>
                         </div>
 
                         <div className="flex items-center gap-3 sm:justify-end font-mono">
-                          <span className="text-amber-400 font-bold">
+                          <span className="text-orange-400 font-bold">
                             Speed: {rec.speedCode} km/h
                           </span>
                           {timeDiffMinutes > 0 && (
@@ -217,7 +217,7 @@ export const TripHistoryModal: React.FC<Props> = ({
                       {/* Raw Hex toggleable / inspectable */}
                       {rec.txHex && (
                         <div className="mt-2 text-[10px] font-mono text-slate-500 truncate bg-slate-900/90 p-1.5 rounded border border-slate-800/80">
-                          TX: <span className="text-emerald-400/90">{rec.txHex}</span>
+                          TX: <span className="text-orange-400/90">{rec.txHex}</span>
                         </div>
                       )}
                     </div>

@@ -30,7 +30,7 @@ export const LocationPickerModal: React.FC<Props> = ({
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-slate-800">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
+            <div className="p-2 rounded-xl bg-orange-500/20 text-orange-400 border border-orange-500/30">
               <MapPin className="w-5 h-5" />
             </div>
             <div>
@@ -62,19 +62,19 @@ export const LocationPickerModal: React.FC<Props> = ({
             }}
             className={`w-full flex items-center justify-between p-3.5 rounded-2xl border transition-all ${
               currentCoords.isRealGps
-                ? 'bg-emerald-950/40 border-emerald-500/50 text-emerald-300 ring-2 ring-emerald-500/20'
+                ? 'bg-orange-950/40 border-orange-500/50 text-orange-300 ring-2 ring-orange-500/20'
                 : 'bg-slate-950/80 hover:bg-slate-800/80 border-slate-800 text-slate-300'
             }`}
           >
             <div className="flex items-center gap-3 text-left">
-              <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400">
+              <div className="p-2 rounded-xl bg-orange-500/20 text-orange-400">
                 <Navigation className="w-5 h-5" />
               </div>
               <div>
                 <div className="text-sm font-bold text-white flex items-center gap-1.5">
                   <span>{t.realGpsActive}</span>
                   {currentCoords.isRealGps && (
-                    <span className="text-[10px] px-1.5 py-0.2 bg-emerald-500 text-slate-950 rounded font-black">
+                    <span className="text-[10px] px-1.5 py-0.2 bg-orange-500 text-slate-950 rounded font-black">
                       ACTIVE
                     </span>
                   )}
@@ -85,7 +85,7 @@ export const LocationPickerModal: React.FC<Props> = ({
               </div>
             </div>
 
-            {currentCoords.isRealGps && <Check className="w-5 h-5 text-emerald-400" />}
+            {currentCoords.isRealGps && <Check className="w-5 h-5 text-orange-400" />}
           </button>
         </div>
 
@@ -111,7 +111,7 @@ export const LocationPickerModal: React.FC<Props> = ({
                 }}
                 className={`w-full flex items-center justify-between p-3 rounded-xl border text-left transition-colors ${
                   isSelected
-                    ? 'bg-amber-950/40 border-amber-500/60 text-white ring-1 ring-amber-500/30'
+                    ? 'bg-orange-950/40 border-orange-500/60 text-white ring-1 ring-orange-500/30'
                     : 'bg-slate-950/60 hover:bg-slate-800/60 border-slate-800/80 text-slate-300'
                 }`}
               >
@@ -122,7 +122,7 @@ export const LocationPickerModal: React.FC<Props> = ({
                       {preset.city}
                     </span>
                   </div>
-                  <div className="text-xs text-amber-300/80 mt-0.5 font-medium">
+                  <div className="text-xs text-orange-300/80 mt-0.5 font-medium">
                     {preset.nameUrdu}
                   </div>
                   <div className="text-[11px] text-slate-500 font-mono mt-0.5">
@@ -130,7 +130,7 @@ export const LocationPickerModal: React.FC<Props> = ({
                   </div>
                 </div>
 
-                {isSelected && <Check className="w-4 h-4 text-amber-400 flex-shrink-0" />}
+                {isSelected && <Check className="w-4 h-4 text-orange-400 flex-shrink-0" />}
               </button>
             );
           })}

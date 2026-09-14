@@ -33,7 +33,7 @@ export const SocketLogsModal: React.FC<Props> = ({
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-slate-800">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl overflow-hidden border border-amber-500/40 bg-slate-950 flex-shrink-0 shadow-md">
+            <div className="w-11 h-11 rounded-2xl overflow-hidden border border-orange-500/40 bg-slate-950 flex-shrink-0 shadow-md">
               <img
                 src="/logo.png"
                 alt="LogiStep Logo"
@@ -48,7 +48,7 @@ export const SocketLogsModal: React.FC<Props> = ({
                 <h3 className="text-base font-bold text-white font-sans">
                   GT06 AVL Telematics Console
                 </h3>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-emerald-400 font-mono">
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-orange-400 font-mono font-bold">
                   {connectionStatus}
                 </span>
               </div>
@@ -74,7 +74,7 @@ export const SocketLogsModal: React.FC<Props> = ({
               type="button"
               onClick={onTestPing}
               disabled={isTesting}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition-colors shadow-sm disabled:opacity-50"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-500 hover:bg-orange-400 text-slate-950 font-black text-xs transition-colors shadow-sm disabled:opacity-50"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isTesting ? 'animate-spin' : ''}`} />
               <span>{isTesting ? 'Handshaking...' : 'Test Login (0x01)'}</span>
@@ -106,14 +106,14 @@ export const SocketLogsModal: React.FC<Props> = ({
                   badge: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
                 },
                 TX: {
-                  bg: 'bg-emerald-950/20 border-emerald-900/30',
-                  text: 'text-emerald-300',
-                  badge: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40',
+                  bg: 'bg-orange-950/20 border-orange-900/30',
+                  text: 'text-orange-300',
+                  badge: 'bg-orange-500/20 text-orange-400 border-orange-500/40',
                 },
                 RX: {
-                  bg: 'bg-teal-950/20 border-teal-900/30',
-                  text: 'text-teal-300',
-                  badge: 'bg-teal-500/20 text-teal-400 border-teal-500/40',
+                  bg: 'bg-amber-950/20 border-amber-900/30',
+                  text: 'text-amber-300',
+                  badge: 'bg-amber-500/20 text-amber-400 border-amber-500/40',
                 },
                 ERROR: {
                   bg: 'bg-rose-950/20 border-rose-900/30',

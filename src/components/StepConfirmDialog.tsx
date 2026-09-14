@@ -52,7 +52,7 @@ export const StepConfirmDialog: React.FC<Props> = ({
     badgeUr: '',
     badgePs: '',
     iconName: 'Truck',
-    accentColor: 'emerald',
+    accentColor: 'orange',
     borderHover: '',
     bgGradient: '',
     glowColor: '',
@@ -82,7 +82,7 @@ export const StepConfirmDialog: React.FC<Props> = ({
           <div>
             {/* Header Tag */}
             <div className="flex items-center gap-2 mb-3">
-              <span className="px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-black tracking-wider uppercase">
+              <span className="px-2.5 py-1 rounded-lg bg-orange-500/20 text-orange-300 border border-orange-500/30 text-xs font-black tracking-wider uppercase">
                 STEP {currentStep.id} • CONFIRMATION
               </span>
               <span className="px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 text-xs font-mono font-bold">
@@ -109,13 +109,13 @@ export const StepConfirmDialog: React.FC<Props> = ({
             <div className="mt-4 p-3.5 bg-slate-950/80 rounded-2xl border border-slate-800 space-y-2.5 text-xs">
               <div className="flex items-center justify-between">
                 <span className="text-slate-400 flex items-center gap-1.5 font-medium">
-                  <Radio className="w-3.5 h-3.5 text-amber-400" />
+                  <Radio className="w-3.5 h-3.5 text-orange-400" />
                   Trip Direction:
                 </span>
                 <span
                   className={`font-bold px-2 py-0.5 rounded flex items-center gap-1 ${
                     direction === 'UP'
-                      ? 'bg-emerald-500/20 text-emerald-300'
+                      ? 'bg-orange-500/20 text-orange-300'
                       : 'bg-amber-500/20 text-amber-300'
                   }`}
                 >
@@ -130,17 +130,17 @@ export const StepConfirmDialog: React.FC<Props> = ({
 
               <div className="flex items-center justify-between">
                 <span className="text-slate-400 flex items-center gap-1.5 font-medium">
-                  <Clock className="w-3.5 h-3.5 text-amber-400" />
+                  <Clock className="w-3.5 h-3.5 text-orange-400" />
                   Speed Column Code:
                 </span>
-                <span className="font-mono font-bold text-amber-400">
+                <span className="font-mono font-bold text-orange-400">
                   {currentStep.speedCode} km/h (Step #{currentStep.id})
                 </span>
               </div>
 
               <div className="flex items-start justify-between gap-2">
                 <span className="text-slate-400 flex items-center gap-1.5 font-medium">
-                  <MapPin className="w-3.5 h-3.5 text-amber-400" />
+                  <MapPin className="w-3.5 h-3.5 text-orange-400" />
                   Location:
                 </span>
                 <span className="text-right font-medium text-slate-300 truncate max-w-[240px]">
@@ -164,7 +164,7 @@ export const StepConfirmDialog: React.FC<Props> = ({
                 type="button"
                 onClick={onConfirm}
                 disabled={isProcessing}
-                className="py-3 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-sm flex items-center justify-center gap-2 shadow-lg shadow-amber-500/25 transition-all disabled:opacity-60"
+                className="py-3 px-4 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-slate-950 font-black text-sm flex items-center justify-center gap-2 shadow-lg shadow-orange-500/25 transition-all disabled:opacity-60"
               >
                 {isProcessing ? (
                   <>
@@ -184,11 +184,11 @@ export const StepConfirmDialog: React.FC<Props> = ({
           /* Success Receipt State */
           <div>
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/40">
+              <div className="w-12 h-12 rounded-2xl bg-orange-500/20 text-orange-400 flex items-center justify-center border border-orange-500/40">
                 <CheckCircle2 className="w-7 h-7" />
               </div>
               <div>
-                <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-black text-[10px] tracking-wider uppercase">
+                <span className="px-2 py-0.5 rounded bg-orange-500/20 text-orange-300 font-black text-[10px] tracking-wider uppercase">
                   CONFIRMED & RECORDED
                 </span>
                 <h3 className="text-lg sm:text-xl font-extrabold text-white">
@@ -213,13 +213,13 @@ export const StepConfirmDialog: React.FC<Props> = ({
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">Direction & Ignition:</span>
-                <span className="font-bold text-emerald-400">
+                <span className="font-bold text-orange-400">
                   {activeResultRecord.direction} (Ignition = {activeResultRecord.ignition})
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">Transmitted Speed:</span>
-                <span className="font-mono font-bold text-amber-400">
+                <span className="font-mono font-bold text-orange-400">
                   {activeResultRecord.speedCode} km/h
                 </span>
               </div>
@@ -235,12 +235,12 @@ export const StepConfirmDialog: React.FC<Props> = ({
                 <div className="pt-2 border-t border-slate-800">
                   <div className="flex items-center justify-between text-[11px] text-slate-400 mb-1">
                     <span className="flex items-center gap-1">
-                      <Terminal className="w-3 h-3 text-amber-400" />
+                      <Terminal className="w-3 h-3 text-orange-400" />
                       GT06 Binary Location Frame (0x12):
                     </span>
-                    <span className="text-emerald-400 font-mono text-[10px]">36 Bytes</span>
+                    <span className="text-orange-400 font-mono text-[10px]">36 Bytes</span>
                   </div>
-                  <div className="font-mono text-[10px] p-2 bg-black/60 rounded-lg text-emerald-300 border border-slate-800 break-all select-all">
+                  <div className="font-mono text-[10px] p-2 bg-black/60 rounded-lg text-orange-300 border border-slate-800 break-all select-all">
                     {activeResultRecord.txHex}
                   </div>
                 </div>
@@ -250,9 +250,9 @@ export const StepConfirmDialog: React.FC<Props> = ({
                 <div className="pt-1">
                   <div className="flex items-center justify-between text-[11px] text-slate-400 mb-1">
                     <span>Server ACK Response (0x01):</span>
-                    <span className="text-emerald-400 font-mono text-[10px]">10 Bytes</span>
+                    <span className="text-orange-400 font-mono text-[10px]">10 Bytes</span>
                   </div>
-                  <div className="font-mono text-[10px] p-2 bg-black/60 rounded-lg text-teal-300 border border-slate-800 break-all select-all">
+                  <div className="font-mono text-[10px] p-2 bg-black/60 rounded-lg text-amber-300 border border-slate-800 break-all select-all">
                     {activeResultRecord.rxHex}
                   </div>
                 </div>
@@ -264,7 +264,7 @@ export const StepConfirmDialog: React.FC<Props> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm transition-colors shadow-lg shadow-emerald-600/30"
+                className="w-full py-3 px-4 rounded-xl bg-orange-500 hover:bg-orange-400 text-slate-950 font-black text-sm transition-colors shadow-lg shadow-orange-500/20"
               >
                 {t.close}
               </button>

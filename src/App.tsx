@@ -141,7 +141,7 @@ export default function App() {
       id: 'init-2',
       timestamp: new Date().toLocaleTimeString(),
       direction: 'INFO',
-      message: 'Active Gateway: avl.vtps.org:5200 • Presence Series ID: 99002',
+      message: 'Active Gateway: avl.vtps.org:5200 • Fleet Series ID: 99002',
     },
   ]);
 

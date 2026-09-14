@@ -27,9 +27,9 @@ export const AndroidToast: React.FC = () => {
   if (!toastMessage) return null;
 
   return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 pointer-events-none px-4 max-w-sm w-full animate-in fade-in slide-in-from-bottom-4 duration-200">
-      <div className="bg-slate-900/95 backdrop-blur-md border border-amber-500/40 text-white px-4 py-2.5 rounded-2xl shadow-2xl flex items-center gap-3">
-        <div className="w-6 h-6 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
+    <div className="fixed bottom-16 left-1/2 -translate-x-1/2 z-50 pointer-events-none px-4 max-w-sm w-full animate-in fade-in slide-in-from-bottom-4 duration-200">
+      <div className="bg-slate-900/95 backdrop-blur-md border border-orange-500/40 text-white px-4 py-2.5 rounded-2xl shadow-2xl flex items-center gap-3">
+        <div className="w-6 h-6 rounded-lg bg-orange-500/20 text-orange-400 flex items-center justify-center shrink-0">
           <CheckCircle2 className="w-4 h-4" />
         </div>
         <p className="text-xs font-semibold text-slate-200 leading-snug">

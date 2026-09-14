@@ -1,77 +1,108 @@
 #!/usr/bin/env python3
 import os
-import sys
 import shutil
 import subprocess
 import zipfile
+import tempfile
 
 def run(cmd, cwd=None):
-    print(f"-> Running: {' '.join(cmd) if isinstance(cmd, list) else cmd}")
+    if isinstance(cmd, list):
+        cmd_str = " ".join(cmd)
+    else:
+        cmd_str = cmd
+    print(f"-> {cmd_str}")
     res = subprocess.run(cmd, shell=isinstance(cmd, str), cwd=cwd, capture_output=True, text=True)
     if res.returncode != 0:
-        print(f"ERROR ({res.returncode}):\nSTDOUT: {res.stdout}\nSTDERR: {res.stderr}")
+        print(f"[!] Stderr:\n{res.stderr}")
+        print(f"[!] Stdout:\n{res.stdout}")
         raise RuntimeError(f"Command failed with code {res.returncode}")
     return res.stdout
 
 def build_apk():
     root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     dist_dir = os.path.join(root_dir, "dist")
+    android_dir = os.path.join(root_dir, "android")
+    app_dir = os.path.join(android_dir, "app", "src", "main")
     
-    # 1. Ensure web app is built
-    if not os.path.exists(os.path.join(dist_dir, "index.html")):
-        print("[*] Building web app with Vite...")
-        run(["npm", "run", "build"], cwd=root_dir)
-        
-    work_dir = "/tmp/apk_build_workspace"
-    if os.path.exists(work_dir):
-        shutil.rmtree(work_dir)
-    
-    src_dir = os.path.join(work_dir, "src", "org", "vtps", "logistep")
+    work_dir = tempfile.mkdtemp(prefix="apk_build_")
+    print(f"[*] Build workspace: {work_dir}")
+
+    # 1. Paths
+    assets_dir = os.path.join(work_dir, "assets")
     res_dir = os.path.join(work_dir, "res")
-    values_dir = os.path.join(res_dir, "values")
-    drawable_dir = os.path.join(res_dir, "mipmap-hdpi")
     gen_dir = os.path.join(work_dir, "gen")
     bin_dir = os.path.join(work_dir, "bin")
-    assets_dir = os.path.join(work_dir, "assets")
-
-    os.makedirs(src_dir, exist_ok=True)
-    os.makedirs(values_dir, exist_ok=True)
-    os.makedirs(drawable_dir, exist_ok=True)
+    src_dir = os.path.join(work_dir, "src")
+    
+    os.makedirs(assets_dir, exist_ok=True)
+    os.makedirs(res_dir, exist_ok=True)
     os.makedirs(gen_dir, exist_ok=True)
     os.makedirs(bin_dir, exist_ok=True)
-    os.makedirs(assets_dir, exist_ok=True)
+    os.makedirs(src_dir, exist_ok=True)
 
-    # 2. Copy web assets to Android assets
-    print("[*] Staging web assets into Android assets/...")
-    shutil.copytree(dist_dir, os.path.join(assets_dir, "www"), ignore=shutil.ignore_patterns("*.apk", "*.map"))
-    shutil.copytree(dist_dir, os.path.join(assets_dir, "public"), ignore=shutil.ignore_patterns("*.apk", "*.map"))
+    # 2. Stage web distribution
+    if os.path.exists(dist_dir):
+        print("[*] Staging web assets into Android assets/...")
+        for root, dirs, files in os.walk(dist_dir):
+            rel = os.path.relpath(root, dist_dir)
+            target_public = os.path.join(assets_dir, "public", rel) if rel != "." else os.path.join(assets_dir, "public")
+            target_www = os.path.join(assets_dir, "www", rel) if rel != "." else os.path.join(assets_dir, "www")
+            os.makedirs(target_public, exist_ok=True)
+            os.makedirs(target_www, exist_ok=True)
+            for f in files:
+                if f.endswith(".apk") or f.endswith(".map") or f == "server.cjs":
+                    continue
+                sf = os.path.join(root, f)
+                shutil.copy2(sf, os.path.join(target_public, f))
+                shutil.copy2(sf, os.path.join(target_www, f))
+        
+        # Also sync to android/app/src/main/assets/public
+        native_assets = os.path.join(app_dir, "assets", "public")
+        os.makedirs(native_assets, exist_ok=True)
+        for root, dirs, files in os.walk(dist_dir):
+            rel = os.path.relpath(root, dist_dir)
+            t = os.path.join(native_assets, rel) if rel != "." else native_assets
+            os.makedirs(t, exist_ok=True)
+            for f in files:
+                if f.endswith(".apk") or f.endswith(".map") or f == "server.cjs":
+                    continue
+                shutil.copy2(os.path.join(root, f), os.path.join(t, f))
 
-    # 3. Process and convert app icon to genuine PNG
+    # 3. Copy resources from android/app/src/main/res
+    src_res = os.path.join(app_dir, "res")
+    if os.path.exists(src_res):
+        for item in os.listdir(src_res):
+            s = os.path.join(src_res, item)
+            d = os.path.join(res_dir, item)
+            if os.path.isdir(s):
+                shutil.copytree(s, d, dirs_exist_ok=True)
+            else:
+                shutil.copy2(s, d)
+
+    # Ensure ic_launcher exists in mipmap-hdpi
+    mipmap_hdpi = os.path.join(res_dir, "mipmap-hdpi")
+    os.makedirs(mipmap_hdpi, exist_ok=True)
     icon_src = os.path.join(root_dir, "public", "logo.png")
     if os.path.exists(icon_src):
-        try:
-            from PIL import Image
-            img = Image.open(icon_src).convert("RGBA")
-            img.save(os.path.join(drawable_dir, "ic_launcher.png"), "PNG")
-            print(f"[*] Converted {icon_src} to genuine PNG icon ({img.size})")
-        except ImportError:
-            shutil.copy(icon_src, os.path.join(drawable_dir, "ic_launcher.png"))
-            print(f"[*] Copied {icon_src} to ic_launcher.png")
+        shutil.copy2(icon_src, os.path.join(mipmap_hdpi, "ic_launcher.png"))
 
-    # 4. Create strings.xml
+    # Ensure values/strings.xml exists
+    values_dir = os.path.join(res_dir, "values")
+    os.makedirs(values_dir, exist_ok=True)
     with open(os.path.join(values_dir, "strings.xml"), "w") as f:
-        f.write('''<resources>
+        f.write('''<?xml version="1.0" encoding="utf-8"?>
+<resources>
     <string name="app_name">LogiStep</string>
 </resources>''')
 
-    # 5. Create AndroidManifest.xml
+    # 4. Manifest
     manifest_path = os.path.join(work_dir, "AndroidManifest.xml")
     with open(manifest_path, "w") as f:
         f.write('''<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="org.vtps.logistep"
-    android:versionCode="1"
-    android:versionName="1.0.0">
+    android:versionCode="2"
+    android:versionName="1.0.1">
 
     <uses-sdk
         android:minSdkVersion="21"
@@ -92,10 +123,11 @@ def build_apk():
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
+        android:usesCleartextTraffic="true"
         android:hardwareAccelerated="true">
 
         <activity
-            android:name=".MainActivity"
+            android:name="org.vtps.logistep.MainActivity"
             android:exported="true"
             android:screenOrientation="portrait"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale">
@@ -107,357 +139,17 @@ def build_apk():
     </application>
 </manifest>''')
 
-    # 6. Create MainActivity.java
-    main_activity_path = os.path.join(src_dir, "MainActivity.java")
-    with open(main_activity_path, "w") as f:
-        f.write('''package org.vtps.logistep;
+    # 5. Java source
+    java_target_dir = os.path.join(src_dir, "org", "vtps", "logistep")
+    os.makedirs(java_target_dir, exist_ok=True)
+    java_src = os.path.join(app_dir, "java", "org", "vtps", "logistep", "MainActivity.java")
+    shutil.copy2(java_src, os.path.join(java_target_dir, "MainActivity.java"))
 
-import android.app.Activity;
-import android.os.Bundle;
-import android.os.Build;
-import android.net.Uri;
-import android.webkit.WebSettings;
-import android.webkit.WebView;
-import android.webkit.WebViewClient;
-import android.webkit.WebChromeClient;
-import android.webkit.WebResourceRequest;
-import android.webkit.WebResourceResponse;
-import android.webkit.ConsoleMessage;
-import android.webkit.GeolocationPermissions;
-import android.content.pm.PackageManager;
-import android.Manifest;
-import android.view.Window;
-import android.view.WindowManager;
-import android.content.res.AssetManager;
-import java.io.InputStream;
-import java.io.IOException;
-import java.util.Map;
-import java.util.HashMap;
-
-public class MainActivity extends Activity {
-    private static final int LOCATION_PERMISSION_REQUEST_CODE = 1001;
-    private static final String APP_HOST = "localhost";
-    private WebView webView;
-    private GeolocationPermissions.Callback pendingGeoCallback;
-    private String pendingGeoOrigin;
-
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        requestWindowFeature(Window.FEATURE_NO_TITLE);
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            Window window = getWindow();
-            window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
-            window.setStatusBarColor(0xFF020617);
-            window.setNavigationBarColor(0xFF020617);
-        }
-
-        webView = new WebView(this);
-        webView.setBackgroundColor(0xFF020617);
-        setContentView(webView);
-
-        WebSettings settings = webView.getSettings();
-        settings.setJavaScriptEnabled(true);
-        settings.setDomStorageEnabled(true);
-        settings.setDatabaseEnabled(true);
-        settings.setGeolocationEnabled(true);
-        settings.setAllowFileAccess(true);
-        settings.setAllowContentAccess(true);
-        settings.setAllowFileAccessFromFileURLs(true);
-        settings.setAllowUniversalAccessFromFileURLs(true);
-        settings.setCacheMode(WebSettings.LOAD_DEFAULT);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
-        }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-            WebView.setWebContentsDebuggingEnabled(true);
-        }
-
-        webView.setWebViewClient(new WebViewClient() {
-            @Override
-            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                return false;
-            }
-
-            @Override
-            public boolean shouldOverrideUrlLoading(WebView view, String url) {
-                return false;
-            }
-
-            @Override
-            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
-                if (request != null && request.getUrl() != null) {
-                    WebResourceResponse resp = handleIntercept(request.getUrl());
-                    if (resp != null) return resp;
-                }
-                return super.shouldInterceptRequest(view, request);
-            }
-
-            @SuppressWarnings("deprecation")
-            @Override
-            public WebResourceResponse shouldInterceptRequest(WebView view, String url) {
-                if (url != null) {
-                    WebResourceResponse resp = handleIntercept(Uri.parse(url));
-                    if (resp != null) return resp;
-                }
-                return super.shouldInterceptRequest(view, url);
-            }
-        });
-
-        webView.setWebChromeClient(new WebChromeClient() {
-            @Override
-            public boolean onConsoleMessage(ConsoleMessage consoleMessage) {
-                android.util.Log.d("LogiStep", consoleMessage.message() + " [" + consoleMessage.sourceId() + ":" + consoleMessage.lineNumber() + "]");
-                return true;
-            }
-
-            @Override
-            public void onGeolocationPermissionsShowPrompt(String origin, GeolocationPermissions.Callback callback) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-                        callback.invoke(origin, true, false);
-                    } else {
-                        pendingGeoCallback = callback;
-                        pendingGeoOrigin = origin;
-                        requestPermissions(new String[]{
-                            Manifest.permission.ACCESS_FINE_LOCATION,
-                            Manifest.permission.ACCESS_COARSE_LOCATION
-                        }, LOCATION_PERMISSION_REQUEST_CODE);
-                    }
-                } else {
-                    callback.invoke(origin, true, false);
-                }
-            }
-        });
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(new String[]{
-                    Manifest.permission.ACCESS_FINE_LOCATION,
-                    Manifest.permission.ACCESS_COARSE_LOCATION
-                }, LOCATION_PERMISSION_REQUEST_CODE);
-            }
-        }
-
-        webView.addJavascriptInterface(new AndroidBridge(), "AndroidBridge");
-        webView.loadUrl("https://" + APP_HOST + "/index.html");
-    }
-
-    public class AndroidBridge {
-        @android.webkit.JavascriptInterface
-        public void vibrate(int ms) {
-            try {
-                android.os.Vibrator v = (android.os.Vibrator) getSystemService(VIBRATOR_SERVICE);
-                if (v != null && v.hasVibrator()) {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        v.vibrate(android.os.VibrationEffect.createOneShot(ms > 0 ? ms : 25, android.os.VibrationEffect.DEFAULT_AMPLITUDE));
-                    } else {
-                        v.vibrate(ms > 0 ? ms : 25);
-                    }
-                }
-            } catch (Exception ignored) {}
-        }
-
-        @android.webkit.JavascriptInterface
-        public void showToast(final String msg) {
-            if (msg == null) return;
-            runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    android.widget.Toast.makeText(MainActivity.this, msg, android.widget.Toast.LENGTH_SHORT).show();
-                }
-            });
-        }
-
-        @android.webkit.JavascriptInterface
-        public String sendTcp(final String host, final int port, final String loginHex, final String locHex, final int timeoutMs) {
-            try {
-                java.net.Socket socket = new java.net.Socket();
-                int timeout = timeoutMs > 0 ? timeoutMs : 3000;
-                socket.connect(new java.net.InetSocketAddress(host, port), timeout);
-                socket.setSoTimeout(timeout);
-                java.io.OutputStream out = socket.getOutputStream();
-                java.io.InputStream in = socket.getInputStream();
-
-                byte[] loginBytes = hexStringToByteArray(loginHex);
-                out.write(loginBytes);
-                out.flush();
-
-                byte[] ackBuf = new byte[64];
-                int ackLen = in.read(ackBuf);
-                String rxHex = ackLen > 0 ? bytesToHex(ackBuf, ackLen) : "";
-
-                byte[] locBytes = hexStringToByteArray(locHex);
-                out.write(locBytes);
-                out.flush();
-
-                try { socket.close(); } catch (Exception ignored) {}
-                return "{\"success\":true,\"rxHex\":\"" + rxHex + "\"}";
-            } catch (Exception e) {
-                return "{\"success\":false,\"error\":\"" + (e.getMessage() != null ? e.getMessage().replace("\"", "'") : "TCP socket error") + "\"}";
-            }
-        }
-    }
-
-    private static byte[] hexStringToByteArray(String s) {
-        if (s == null) return new byte[0];
-        s = s.replaceAll("[^0-9A-Fa-f]", "");
-        int len = s.length();
-        byte[] data = new byte[len / 2];
-        for (int i = 0; i < len; i += 2) {
-            data[i / 2] = (byte) ((Character.digit(s.charAt(i), 16) << 4) + Character.digit(s.charAt(i+1), 16));
-        }
-        return data;
-    }
-
-    private static String bytesToHex(byte[] bytes, int length) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < length; i++) {
-            sb.append(String.format("%02X ", bytes[i]));
-        }
-        return sb.toString().trim();
-    }
-
-    private WebResourceResponse handleIntercept(Uri uri) {
-        if (uri == null) return null;
-        String host = uri.getHost();
-        if (host == null || (!host.equalsIgnoreCase(APP_HOST) && !host.equalsIgnoreCase("127.0.0.1") && !host.equalsIgnoreCase("appassets.androidplatform.net"))) {
-            return null;
-        }
-
-        String path = uri.getPath();
-        if (path == null || path.isEmpty() || path.equals("/")) {
-            path = "index.html";
-        } else if (path.startsWith("/")) {
-            path = path.substring(1);
-        }
-
-        // Never let API routes fall through to index.html SPA fallback
-        if (path.startsWith("api/")) {
-            String jsonResp = "{\"success\":true,\"mode\":\"LIVE_ANDROID\",\"message\":\"Native Android bridge processed\"}";
-            try {
-                byte[] b = jsonResp.getBytes("UTF-8");
-                InputStream is = new java.io.ByteArrayInputStream(b);
-                Map<String, String> headers = new HashMap<>();
-                headers.put("Access-Control-Allow-Origin", "*");
-                headers.put("Content-Type", "application/json");
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                    return new WebResourceResponse("application/json", "UTF-8", 200, "OK", headers, is);
-                } else {
-                    return new WebResourceResponse("application/json", "UTF-8", is);
-                }
-            } catch (Exception ignored) {}
-        }
-
-        AssetManager assets = getAssets();
-        String[] prefixes = new String[]{"www/", "public/", ""};
-
-        for (String prefix : prefixes) {
-            String fullPath = prefix + path;
-            try {
-                InputStream is = assets.open(fullPath);
-                String mimeType = getMimeType(path);
-                Map<String, String> headers = new HashMap<>();
-                headers.put("Access-Control-Allow-Origin", "*");
-                headers.put("Cache-Control", "no-cache");
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                    return new WebResourceResponse(mimeType, "UTF-8", 200, "OK", headers, is);
-                } else {
-                    return new WebResourceResponse(mimeType, "UTF-8", is);
-                }
-            } catch (IOException ignored) {
-            }
-        }
-
-        // SPA routing fallback (excluding api/)
-        if (!path.contains(".") && !path.startsWith("api/")) {
-            for (String prefix : prefixes) {
-                String indexPath = prefix + "index.html";
-                try {
-                    InputStream is = assets.open(indexPath);
-                    Map<String, String> headers = new HashMap<>();
-                    headers.put("Access-Control-Allow-Origin", "*");
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                        return new WebResourceResponse("text/html", "UTF-8", 200, "OK", headers, is);
-                    } else {
-                        return new WebResourceResponse("text/html", "UTF-8", is);
-                    }
-                } catch (IOException ignored) {
-                }
-            }
-        }
-
-        return null;
-    }
-
-    private String getMimeType(String path) {
-        String lower = path.toLowerCase();
-        if (lower.endsWith(".html")) return "text/html";
-        if (lower.endsWith(".js") || lower.endsWith(".mjs")) return "application/javascript";
-        if (lower.endsWith(".css")) return "text/css";
-        if (lower.endsWith(".json") || lower.endsWith(".webmanifest")) return "application/json";
-        if (lower.endsWith(".png")) return "image/png";
-        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
-        if (lower.endsWith(".svg")) return "image/svg+xml";
-        if (lower.endsWith(".ico")) return "image/x-icon";
-        if (lower.endsWith(".webp")) return "image/webp";
-        if (lower.endsWith(".woff2")) return "font/woff2";
-        if (lower.endsWith(".woff")) return "font/woff";
-        if (lower.endsWith(".ttf")) return "font/ttf";
-        return "application/octet-stream";
-    }
-
-    @Override
-    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == LOCATION_PERMISSION_REQUEST_CODE) {
-            boolean granted = grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED;
-            if (pendingGeoCallback != null && pendingGeoOrigin != null) {
-                pendingGeoCallback.invoke(pendingGeoOrigin, granted, false);
-                pendingGeoCallback = null;
-                pendingGeoOrigin = null;
-            }
-        }
-    }
-
-    @Override
-    public void onBackPressed() {
-        if (webView != null) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-                webView.evaluateJavascript("typeof window.handleAndroidBack === 'function' ? window.handleAndroidBack() : false;", new android.webkit.ValueCallback<String>() {
-                    @Override
-                    public void onReceiveValue(String val) {
-                        if ("true".equalsIgnoreCase(val) || "\"true\"".equalsIgnoreCase(val)) {
-                            return;
-                        }
-                        if (webView.canGoBack()) {
-                            webView.goBack();
-                        } else {
-                            MainActivity.super.onBackPressed();
-                        }
-                    }
-                });
-            } else if (webView.canGoBack()) {
-                webView.goBack();
-            } else {
-                super.onBackPressed();
-            }
-        } else {
-            super.onBackPressed();
-        }
-    }
-}
-''')
-
+    # 6. Locate Android SDK
     android_jar = "/opt/android-sdk/platforms/android-34/android.jar"
     if not os.path.exists(android_jar):
         android_jar = "/usr/lib/android-sdk/platforms/android-23/android.jar"
-    if not os.path.exists(android_jar):
-        raise FileNotFoundError(f"Missing android.jar at {android_jar}")
-
-    print(f"[*] Using Android SDK: {android_jar}")
+    print(f"[*] Using Android SDK jar: {android_jar}")
 
     # 7. Generate R.java via aapt
     print("[*] Generating R.java via aapt...")
@@ -474,19 +166,20 @@ public class MainActivity extends Activity {
     # 8. Compile Java sources with javac
     print("[*] Compiling Java code with javac...")
     r_java = os.path.join(gen_dir, "org", "vtps", "logistep", "R.java")
+    main_java = os.path.join(java_target_dir, "MainActivity.java")
     run([
         "javac", "-source", "8", "-target", "8",
         "-bootclasspath", android_jar,
         "-cp", f"{android_jar}:{gen_dir}",
         "-d", bin_dir,
-        main_activity_path, r_java
+        main_java, r_java
     ], cwd=work_dir)
 
-    # 9. Convert class files to classes.dex using dalvik-exchange
+    # 9. Convert class files to classes.dex using dalvik-exchange (dx)
     print("[*] Creating classes.dex via dalvik-exchange...")
     classes_dex = os.path.join(bin_dir, "classes.dex")
     run([
-        "/usr/bin/dalvik-exchange", "--dex",
+        "dalvik-exchange", "--dex",
         f"--output={classes_dex}",
         bin_dir
     ], cwd=work_dir)
@@ -510,16 +203,16 @@ public class MainActivity extends Activity {
     with zipfile.ZipFile(base_apk, 'a', compression=zipfile.ZIP_DEFLATED) as apk_zip:
         apk_zip.write(classes_dex, "classes.dex")
 
-    # 12. Zipalign APK
-    print("[*] Aligning APK with zipalign...")
+    # 12. 4-byte Zipalign APK
+    print("[*] Aligning APK with zipalign (4-byte alignment)...")
     aligned_apk = os.path.join(work_dir, "aligned.apk")
     run([
         "zipalign", "-f", "-p", "4",
         base_apk, aligned_apk
     ], cwd=work_dir)
 
-    # 13. Generate debug keystore if not present
-    keystore_path = os.path.join(work_dir, "debug.keystore")
+    # 13. Persistent debug keystore
+    keystore_path = os.path.join(root_dir, "debug.keystore")
     if not os.path.exists(keystore_path):
         print("[*] Generating Android debug signing key...")
         run([
@@ -532,10 +225,10 @@ public class MainActivity extends Activity {
             "-keysize", "2048",
             "-validity", "10000",
             "-dname", "CN=LogiStep,OU=VTP,O=VTPFleet,C=US"
-        ], cwd=work_dir)
+        ], cwd=root_dir)
 
-    # 14. Sign APK with apksigner (enabling v1, v2, and v3)
-    print("[*] Signing APK with apksigner...")
+    # 14. Sign APK with apksigner (v1, v2, and v3)
+    print("[*] Signing APK with apksigner (v1, v2, v3 schemes)...")
     signed_apk = os.path.join(work_dir, "LogiStep.apk")
     shutil.copy2(aligned_apk, signed_apk)
     run([
@@ -550,33 +243,27 @@ public class MainActivity extends Activity {
     ], cwd=work_dir)
 
     # 15. Verify signed APK
-    print("[*] Verifying signed APK...")
-    verify_output = run([
-        "apksigner", "verify", "--verbose", signed_apk
-    ], cwd=work_dir)
-    print(verify_output)
+    print("[*] Verifying signed APK with apksigner...")
+    verify_out = run(["apksigner", "verify", "--verbose", signed_apk], cwd=work_dir)
+    print(verify_out.strip())
 
-    # 16. Distribute output APK
-    apk_out_dir = os.path.join(root_dir, "apk")
-    public_apk_dir = os.path.join(root_dir, "public")
-    dist_apk_dir = os.path.join(root_dir, "dist")
-    
-    os.makedirs(apk_out_dir, exist_ok=True)
-    os.makedirs(public_apk_dir, exist_ok=True)
-    os.makedirs(dist_apk_dir, exist_ok=True)
-
+    # 16. Distribute to all target locations
     destinations = [
         os.path.join(root_dir, "LogiStep.apk"),
-        os.path.join(apk_out_dir, "LogiStep.apk"),
-        os.path.join(public_apk_dir, "LogiStep.apk"),
-        os.path.join(dist_apk_dir, "LogiStep.apk"),
+        os.path.join(root_dir, "apk", "LogiStep.apk"),
+        os.path.join(root_dir, "public", "LogiStep.apk"),
+        os.path.join(root_dir, "dist", "LogiStep.apk"),
+        os.path.join(app_dir, "assets", "public", "LogiStep.apk"),
     ]
 
+    apk_size = os.path.getsize(signed_apk)
     for dest in destinations:
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
         shutil.copy2(signed_apk, dest)
-        print(f"[+] Output ready: {dest} ({os.path.getsize(dest)} bytes)")
+        print(f"[✓] Deployed: {dest} ({apk_size} bytes)")
 
-    print("\nSUCCESS: Real Android APK compiled, aligned, and signed successfully!")
+    shutil.rmtree(work_dir, ignore_errors=True)
+    print(f"\n[SUCCESS] Genuine native Android APK compiled and cryptographically verified!")
 
 if __name__ == "__main__":
     build_apk()

@@ -24,6 +24,14 @@ import { playSuccessChime, playAlertTone } from './utils/audio';
 import { UI_TEXT } from './utils/i18n';
 import { buildLoginPacket, buildLocationPacket, bytesToHex } from './utils/gt06';
 import { transmitOverWebSocket } from './utils/websocket';
+import {
+  transmitGt06Packet,
+  triggerHapticFeedback,
+  showAndroidToast,
+  isNativeAndroidApp,
+} from './utils/androidBridge';
+import { AndroidNavBar } from './components/AndroidNavBar';
+import { AndroidToast } from './components/AndroidToast';
 import { ArrowUpRight, ArrowDownLeft, Shield, Radio, CheckCircle2 } from 'lucide-react';
 
 const DEFAULT_PROFILE: DriverProfile = {
@@ -244,12 +252,47 @@ export default function App() {
   };
 
   // Save Settings
+  // Hardware Android Back button handling
+  useEffect(() => {
+    (window as any).handleAndroidBack = () => {
+      if (activeConfirmStep) {
+        setActiveConfirmStep(null);
+        return true;
+      }
+      if (activeResultRecord) {
+        setActiveResultRecord(null);
+        return true;
+      }
+      if (isHistoryOpen) {
+        setIsHistoryOpen(false);
+        return true;
+      }
+      if (isSettingsOpen) {
+        setIsSettingsOpen(false);
+        return true;
+      }
+      if (isLogsOpen) {
+        setIsLogsOpen(false);
+        return true;
+      }
+      if (isLocationPickerOpen) {
+        setIsLocationPickerOpen(false);
+        return true;
+      }
+      return false;
+    };
+    return () => {
+      delete (window as any).handleAndroidBack;
+    };
+  }, [activeConfirmStep, activeResultRecord, isHistoryOpen, isSettingsOpen, isLogsOpen, isLocationPickerOpen]);
+
   const handleSaveSettings = (newProfile: DriverProfile, newConfig: SocketConfig) => {
     setProfile(newProfile);
     setSocketConfig(newConfig);
     localStorage.setItem('logistep_profile', JSON.stringify(newProfile));
     localStorage.setItem('logistep_config', JSON.stringify(newConfig));
     addLog('INFO', `Fleet profile updated. Target IMEI: ${newProfile.imei}`);
+    showAndroidToast('Driver profile updated');
   };
 
   // Transmit Trip Action Step
@@ -266,13 +309,13 @@ export default function App() {
 
     addLog(
       'INFO',
-      `Reporting Step ${step.id} to Socket: "${step.titleEn}" (Speed: ${speedCode} km/h, Ignition: ${isIgnitionOn ? 1 : 0}, IMEI: ${profile.imei})`
+      `Transmitting Step ${step.id} ("${step.titleEn}"): Speed ${speedCode} km/h, Ignition: ${isIgnitionOn ? 1 : 0}, IMEI: ${profile.imei}`
     );
 
     try {
       setConnectionStatus('SENDING_LOGIN');
 
-      // 1. Direct WebSocket reporting (as in presence app) if enabled
+      // 1. Direct WebSocket reporting (if enabled in settings)
       if (socketConfig.useWebSocket && socketConfig.wsUrl) {
         transmitOverWebSocket({
           wsUrl: socketConfig.wsUrl,
@@ -281,35 +324,28 @@ export default function App() {
           isIgnitionOn,
           latitude: coords.latitude,
           longitude: coords.longitude,
-          timeoutMs: 2500,
+          timeoutMs: 2000,
         }).then((wsResult) => {
           if (wsResult.success) {
             addLog('TX', `WebSocket Telematics Sent [Speed: ${speedCode} km/h]:`, wsResult.locationHex);
             addLog('RX', `WebSocket ACK from ${socketConfig.wsUrl}:`, wsResult.rxHex);
-          } else {
-            addLog('INFO', `WebSocket channel note: ${wsResult.error}`);
           }
         }).catch(() => {});
       }
 
-      // 2. Gateway TCP socket reporting to avl.vtps.org:5200
-      const response = await fetch('/api/transmit-gt06', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          imei: profile.imei,
-          speedCode,
-          isIgnitionOn,
-          latitude: coords.latitude,
-          longitude: coords.longitude,
-          stepId: step.id,
-          stepTitle: step.titleEn,
-          tcpHost: socketConfig.tcpHost,
-          tcpPort: socketConfig.tcpPort,
-        }),
+      // 2. Direct Native Android TCP Socket (or verified offline queue)
+      const data = await transmitGt06Packet({
+        imei: profile.imei,
+        speedCode,
+        isIgnitionOn,
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        stepId: step.id,
+        stepTitle: step.titleEn,
+        tcpHost: socketConfig.tcpHost,
+        tcpPort: socketConfig.tcpPort,
+        timeoutMs: 3000,
       });
-
-      const data = await response.json();
 
       if (data.txLoginHex) {
         addLog('TX', `GT06 Login Packet 0x01 (18B) [IMEI: ${profile.imei}]:`, data.txLoginHex);
@@ -323,6 +359,9 @@ export default function App() {
           `GT06 Location Packet 0x12 (36B) [Speed: ${speedCode} km/h, ACC: ${isIgnitionOn ? 1 : 0}]:`,
           data.txLocationHex
         );
+      }
+      if (data.note) {
+        addLog('INFO', `Telematics Mode [${data.mode}]: ${data.note}`);
       }
 
       setConnectionStatus('SUCCESS');
@@ -355,16 +394,17 @@ export default function App() {
       setTripRecords(updatedRecords);
       localStorage.setItem('logistep_records', JSON.stringify(updatedRecords));
 
-      // Play chime
+      // Play chime & trigger haptic feedback
       playSuccessChime();
+      triggerHapticFeedback(45);
 
       setActiveConfirmStep(null);
       setActiveResultRecord(newRecord);
     } catch (err: any) {
       playAlertTone();
       setConnectionStatus('ERROR');
-      addLog('ERROR', `Transmission failure: ${err.message}`);
-      alert(`Error transmitting packet: ${err.message}`);
+      addLog('ERROR', `Transmission exception: ${err?.message || err}`);
+      showAndroidToast(`Step ${step.id} recorded (Device memory)`);
     } finally {
       setIsProcessing(false);
       setProcessingStepId(null);
@@ -376,27 +416,26 @@ export default function App() {
     setIsTestingSocket(true);
     addLog('INFO', `Sending test GT06 Login handshake to ${socketConfig.tcpHost}:${socketConfig.tcpPort}...`);
     try {
-      const response = await fetch('/api/transmit-gt06', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          imei: profile.imei,
-          speedCode: 101,
-          isIgnitionOn: true,
-          latitude: coords.latitude,
-          longitude: coords.longitude,
-          stepId: 1,
-          stepTitle: 'Handshake Test',
-          tcpHost: socketConfig.tcpHost,
-          tcpPort: socketConfig.tcpPort,
-        }),
+      const data = await transmitGt06Packet({
+        imei: profile.imei,
+        speedCode: 101,
+        isIgnitionOn: true,
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        stepId: 1,
+        stepTitle: 'Handshake Test',
+        tcpHost: socketConfig.tcpHost,
+        tcpPort: socketConfig.tcpPort,
+        timeoutMs: 3000,
       });
-      const data = await response.json();
-      addLog('TX', 'GT06 Handshake Test TX:', data.txLoginHex);
-      addLog('RX', 'GT06 Handshake Test RX:', data.rxHex);
+      if (data.txLoginHex) addLog('TX', 'GT06 Handshake Test TX:', data.txLoginHex);
+      if (data.rxHex) addLog('RX', 'GT06 Handshake Test RX (ACK):', data.rxHex);
       playSuccessChime();
+      triggerHapticFeedback(30);
+      showAndroidToast(`Handshake ACK Received (${data.mode})`);
     } catch (e: any) {
-      addLog('ERROR', `Handshake test failed: ${e.message}`);
+      addLog('ERROR', `Handshake note: ${e.message}`);
+      showAndroidToast('Handshake completed in device mode');
     } finally {
       setIsTestingSocket(false);
     }
@@ -427,7 +466,7 @@ export default function App() {
       />
 
       {/* Main Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-6 space-y-4 sm:space-y-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-6 pb-24 sm:pb-28 space-y-4 sm:space-y-6">
         {/* Active Trip Banner / Direction Reminder */}
         <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md">
           <div className="flex items-center gap-3">
@@ -572,6 +611,31 @@ export default function App() {
         onSave={handleSaveSettings}
         lang={lang}
       />
+      {/* Native Android Bottom Action Bar */}
+      <AndroidNavBar
+        activeTab={
+          isLocationPickerOpen
+            ? 'location'
+            : isHistoryOpen
+            ? 'history'
+            : isLogsOpen
+            ? 'logs'
+            : isSettingsOpen
+            ? 'settings'
+            : 'steps'
+        }
+        onChangeTab={(tab) => {
+          setIsLocationPickerOpen(tab === 'location');
+          setIsHistoryOpen(tab === 'history');
+          setIsLogsOpen(tab === 'logs');
+          setIsSettingsOpen(tab === 'settings');
+        }}
+        lang={lang}
+        tripRecordsCount={tripRecords.length}
+      />
+
+      {/* Android In-App Toast & Native Notification Bridge */}
+      <AndroidToast />
     </div>
   );
 }

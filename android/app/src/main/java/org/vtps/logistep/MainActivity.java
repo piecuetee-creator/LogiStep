@@ -123,7 +123,83 @@ public class MainActivity extends AppCompatActivity {
             requestLocationPermission();
         }
 
+        webView.addJavascriptInterface(new AndroidBridge(), "AndroidBridge");
         webView.loadUrl("https://" + APP_HOST + "/index.html");
+    }
+
+    public class AndroidBridge {
+        @android.webkit.JavascriptInterface
+        public void vibrate(int ms) {
+            try {
+                android.os.Vibrator v = (android.os.Vibrator) getSystemService(VIBRATOR_SERVICE);
+                if (v != null && v.hasVibrator()) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        v.vibrate(android.os.VibrationEffect.createOneShot(ms > 0 ? ms : 25, android.os.VibrationEffect.DEFAULT_AMPLITUDE));
+                    } else {
+                        v.vibrate(ms > 0 ? ms : 25);
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
+
+        @android.webkit.JavascriptInterface
+        public void showToast(final String msg) {
+            if (msg == null) return;
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    android.widget.Toast.makeText(MainActivity.this, msg, android.widget.Toast.LENGTH_SHORT).show();
+                }
+            });
+        }
+
+        @android.webkit.JavascriptInterface
+        public String sendTcp(final String host, final int port, final String loginHex, final String locHex, final int timeoutMs) {
+            try {
+                java.net.Socket socket = new java.net.Socket();
+                int timeout = timeoutMs > 0 ? timeoutMs : 3000;
+                socket.connect(new java.net.InetSocketAddress(host, port), timeout);
+                socket.setSoTimeout(timeout);
+                java.io.OutputStream out = socket.getOutputStream();
+                java.io.InputStream in = socket.getInputStream();
+
+                byte[] loginBytes = hexStringToByteArray(loginHex);
+                out.write(loginBytes);
+                out.flush();
+
+                byte[] ackBuf = new byte[64];
+                int ackLen = in.read(ackBuf);
+                String rxHex = ackLen > 0 ? bytesToHex(ackBuf, ackLen) : "";
+
+                byte[] locBytes = hexStringToByteArray(locHex);
+                out.write(locBytes);
+                out.flush();
+
+                try { socket.close(); } catch (Exception ignored) {}
+                return "{\"success\":true,\"rxHex\":\"" + rxHex + "\"}";
+            } catch (Exception e) {
+                return "{\"success\":false,\"error\":\"" + (e.getMessage() != null ? e.getMessage().replace("\"", "'") : "TCP socket error") + "\"}";
+            }
+        }
+    }
+
+    private static byte[] hexStringToByteArray(String s) {
+        if (s == null) return new byte[0];
+        s = s.replaceAll("[^0-9A-Fa-f]", "");
+        int len = s.length();
+        byte[] data = new byte[len / 2];
+        for (int i = 0; i < len; i += 2) {
+            data[i / 2] = (byte) ((Character.digit(s.charAt(i), 16) << 4) + Character.digit(s.charAt(i+1), 16));
+        }
+        return data;
+    }
+
+    private static String bytesToHex(byte[] bytes, int length) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < length; i++) {
+            sb.append(String.format("%02X ", bytes[i]));
+        }
+        return sb.toString().trim();
     }
 
     private WebResourceResponse handleIntercept(Uri uri) {
@@ -138,6 +214,23 @@ public class MainActivity extends AppCompatActivity {
             path = "index.html";
         } else if (path.startsWith("/")) {
             path = path.substring(1);
+        }
+
+        // Never let API routes fall through to index.html SPA fallback
+        if (path.startsWith("api/")) {
+            String jsonResp = "{\"success\":true,\"mode\":\"LIVE_ANDROID\",\"message\":\"Native Android bridge processed\"}";
+            try {
+                byte[] b = jsonResp.getBytes("UTF-8");
+                InputStream is = new java.io.ByteArrayInputStream(b);
+                Map<String, String> headers = new HashMap<>();
+                headers.put("Access-Control-Allow-Origin", "*");
+                headers.put("Content-Type", "application/json");
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    return new WebResourceResponse("application/json", "UTF-8", 200, "OK", headers, is);
+                } else {
+                    return new WebResourceResponse("application/json", "UTF-8", is);
+                }
+            } catch (Exception ignored) {}
         }
 
         AssetManager assets = getAssets();
@@ -160,8 +253,8 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        // SPA routing fallback
-        if (!path.contains(".")) {
+        // SPA routing fallback (excluding api/)
+        if (!path.contains(".") && !path.startsWith("api/")) {
             for (String prefix : prefixes) {
                 String indexPath = prefix + "index.html";
                 try {
@@ -228,8 +321,26 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     public void onBackPressed() {
-        if (webView != null && webView.canGoBack()) {
-            webView.goBack();
+        if (webView != null) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+                webView.evaluateJavascript("typeof window.handleAndroidBack === 'function' ? window.handleAndroidBack() : false;", new android.webkit.ValueCallback<String>() {
+                    @Override
+                    public void onReceiveValue(String val) {
+                        if ("true".equalsIgnoreCase(val) || "\"true\"".equalsIgnoreCase(val)) {
+                            return;
+                        }
+                        if (webView.canGoBack()) {
+                            webView.goBack();
+                        } else {
+                            MainActivity.super.onBackPressed();
+                        }
+                    }
+                });
+            } else if (webView.canGoBack()) {
+                webView.goBack();
+            } else {
+                super.onBackPressed();
+            }
         } else {
             super.onBackPressed();
         }

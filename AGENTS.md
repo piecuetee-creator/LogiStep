@@ -9,3 +9,7 @@
 
 ### 2. LogiStep 3D Branding
 - Use the official 3D metallic silver 'L' with ascending glowing crystal nodes and ruby GPS marker logo (`/public/logo.png` and `/public/icon.svg`) across all internal components (header, modals, status cards) and external manifest assets.
+
+### 3. Automatic APK Generation & Sync in apk/ Folder
+- Whenever ANY modification is made to the app, the agent MUST recompile and update the native Android APK files directly in the `apk/` folder (`apk/LogiStep.apk`, `apk/app-release.apk`, `apk/app-debug.apk`, and `apk/logistep.apk`).
+- Always increment the APK `versionCode` and update all copies in root, `apk/`, and `dist/` so the user always has the latest installable Android APK.

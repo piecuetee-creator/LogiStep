@@ -101,8 +101,8 @@ def build_apk():
         f.write('''<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="org.vtps.logistep"
-    android:versionCode="2"
-    android:versionName="1.0.1">
+    android:versionCode="3"
+    android:versionName="1.0.2">
 
     <uses-sdk
         android:minSdkVersion="21"
@@ -253,9 +253,14 @@ def build_apk():
     destinations = [
         os.path.join(root_dir, "LogiStep.apk"),
         os.path.join(root_dir, "apk", "LogiStep.apk"),
+        os.path.join(root_dir, "apk", "app-release.apk"),
+        os.path.join(root_dir, "apk", "app-debug.apk"),
+        os.path.join(root_dir, "apk", "logistep.apk"),
         os.path.join(root_dir, "public", "LogiStep.apk"),
         os.path.join(root_dir, "dist", "LogiStep.apk"),
         os.path.join(app_dir, "assets", "public", "LogiStep.apk"),
+        os.path.join(app_dir, "build", "outputs", "apk", "release", "app-release.apk"),
+        os.path.join(app_dir, "build", "outputs", "apk", "debug", "app-debug.apk"),
     ]
 
     apk_size = os.path.getsize(signed_apk)

@@ -34,6 +34,7 @@ export const TripHistoryModal: React.FC<Props> = ({
 
   const t = UI_TEXT[lang] || UI_TEXT.en;
   const [copied, setCopied] = useState(false);
+  const [showConfirmClear, setShowConfirmClear] = useState(false);
 
   // Generate text report for WhatsApp / Dispatcher
   const handleCopySummary = () => {
@@ -96,29 +97,52 @@ export const TripHistoryModal: React.FC<Props> = ({
 
         {/* Action bar: Share/Copy + Clear */}
         {records.length > 0 && (
-          <div className="flex items-center justify-between py-2.5 px-3 bg-slate-950/60 rounded-xl my-3 border border-slate-800/80">
-            <button
-              type="button"
-              onClick={handleCopySummary}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition-colors shadow-sm"
-            >
-              {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-              <span>{copied ? 'Copied to Clipboard!' : 'Copy WhatsApp Report'}</span>
-            </button>
+          showConfirmClear ? (
+            <div className="p-3 bg-rose-950/70 border border-rose-800/80 rounded-xl my-3 text-xs space-y-2">
+              <p className="text-rose-200 font-medium">
+                {t.clearTripConfirm || "Reset trip history? All recorded steps will be cleared."}
+              </p>
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmClear(false)}
+                  className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClearRecords();
+                    setShowConfirmClear(false);
+                  }}
+                  className="px-3 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold transition-colors shadow-sm"
+                >
+                  Reset History
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between py-2.5 px-3 bg-slate-950/60 rounded-xl my-3 border border-slate-800/80">
+              <button
+                type="button"
+                onClick={handleCopySummary}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition-colors shadow-sm"
+              >
+                {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copied ? 'Copied to Clipboard!' : 'Copy WhatsApp Report'}</span>
+              </button>
 
-            <button
-              type="button"
-              onClick={() => {
-                if (window.confirm(t.clearTripConfirm)) {
-                  onClearRecords();
-                }
-              }}
-              className="flex items-center gap-1 text-xs text-rose-400 hover:text-rose-300 font-medium px-2 py-1 rounded hover:bg-rose-500/10 transition-colors"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span>{t.clearTrip}</span>
-            </button>
-          </div>
+              <button
+                type="button"
+                onClick={() => setShowConfirmClear(true)}
+                className="flex items-center gap-1 text-xs text-rose-400 hover:text-rose-300 font-medium px-2 py-1 rounded hover:bg-rose-500/10 transition-colors"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{t.clearTrip}</span>
+              </button>
+            </div>
+          )
         )}
 
         {/* Timeline Content */}

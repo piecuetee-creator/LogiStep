@@ -122,6 +122,7 @@ def build_apk():
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
+        android:theme="@style/Theme.LogiStep"
         android:supportsRtl="true"
         android:usesCleartextTraffic="true"
         android:hardwareAccelerated="true">
@@ -129,6 +130,7 @@ def build_apk():
         <activity
             android:name="org.vtps.logistep.MainActivity"
             android:exported="true"
+            android:theme="@style/Theme.LogiStep"
             android:screenOrientation="portrait"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale">
             <intent-filter>

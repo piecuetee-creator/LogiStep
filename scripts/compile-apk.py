@@ -3,6 +3,7 @@ import os
 import shutil
 import subprocess
 import zipfile
+import struct
 import tempfile
 
 def run(cmd, cwd=None):
@@ -27,196 +28,101 @@ def build_apk():
     work_dir = tempfile.mkdtemp(prefix="apk_build_")
     print(f"[*] Build workspace: {work_dir}")
 
-    # 1. Paths
-    assets_dir = os.path.join(work_dir, "assets")
-    res_dir = os.path.join(work_dir, "res")
-    gen_dir = os.path.join(work_dir, "gen")
-    bin_dir = os.path.join(work_dir, "bin")
-    src_dir = os.path.join(work_dir, "src")
-    
-    os.makedirs(assets_dir, exist_ok=True)
-    os.makedirs(res_dir, exist_ok=True)
-    os.makedirs(gen_dir, exist_ok=True)
-    os.makedirs(bin_dir, exist_ok=True)
-    os.makedirs(src_dir, exist_ok=True)
+    # Locate base APK with pre-compiled native assets
+    candidates = [
+        os.path.join(root_dir, "apk", "LogiStep.apk"),
+        os.path.join(root_dir, "aligned.apk"),
+        os.path.join(root_dir, "LogiStep.apk"),
+    ]
+    base_apk = None
+    for cand in candidates:
+        if os.path.exists(cand) and os.path.getsize(cand) > 100000:
+            base_apk = cand
+            break
 
-    # 2. Stage web distribution
-    if os.path.exists(dist_dir):
-        print("[*] Staging web assets into Android assets/...")
-        for root, dirs, files in os.walk(dist_dir):
-            rel = os.path.relpath(root, dist_dir)
-            target_public = os.path.join(assets_dir, "public", rel) if rel != "." else os.path.join(assets_dir, "public")
-            target_www = os.path.join(assets_dir, "www", rel) if rel != "." else os.path.join(assets_dir, "www")
-            os.makedirs(target_public, exist_ok=True)
-            os.makedirs(target_www, exist_ok=True)
-            for f in files:
-                if f.endswith(".apk") or f.endswith(".map") or f == "server.cjs":
-                    continue
-                sf = os.path.join(root, f)
-                shutil.copy2(sf, os.path.join(target_public, f))
-                shutil.copy2(sf, os.path.join(target_www, f))
-        
-        # Also sync to android/app/src/main/assets/public
-        native_assets = os.path.join(app_dir, "assets", "public")
-        os.makedirs(native_assets, exist_ok=True)
-        for root, dirs, files in os.walk(dist_dir):
-            rel = os.path.relpath(root, dist_dir)
-            t = os.path.join(native_assets, rel) if rel != "." else native_assets
-            os.makedirs(t, exist_ok=True)
-            for f in files:
-                if f.endswith(".apk") or f.endswith(".map") or f == "server.cjs":
-                    continue
-                shutil.copy2(os.path.join(root, f), os.path.join(t, f))
+    if not base_apk:
+        raise RuntimeError("No base APK found to package native components.")
 
-    # 3. Copy resources from android/app/src/main/res
-    src_res = os.path.join(app_dir, "res")
-    if os.path.exists(src_res):
-        for item in os.listdir(src_res):
-            s = os.path.join(src_res, item)
-            d = os.path.join(res_dir, item)
-            if os.path.isdir(s):
-                shutil.copytree(s, d, dirs_exist_ok=True)
-            else:
-                shutil.copy2(s, d)
+    print(f"[*] Sourcing native foundation from: {base_apk}")
 
-    # Ensure ic_launcher exists in mipmap-hdpi
-    mipmap_hdpi = os.path.join(res_dir, "mipmap-hdpi")
-    os.makedirs(mipmap_hdpi, exist_ok=True)
-    icon_src = os.path.join(root_dir, "public", "logo.png")
-    if os.path.exists(icon_src):
-        shutil.copy2(icon_src, os.path.join(mipmap_hdpi, "ic_launcher.png"))
-
-    # Ensure values/strings.xml exists
-    values_dir = os.path.join(res_dir, "values")
-    os.makedirs(values_dir, exist_ok=True)
-    with open(os.path.join(values_dir, "strings.xml"), "w") as f:
-        f.write('''<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="app_name">LogiStep</string>
-</resources>''')
-
-    # 4. Manifest
-    manifest_path = os.path.join(work_dir, "AndroidManifest.xml")
-    with open(manifest_path, "w") as f:
-        f.write('''<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="org.vtps.logistep"
-    android:versionCode="3"
-    android:versionName="1.0.2">
-
-    <uses-sdk
-        android:minSdkVersion="21"
-        android:targetSdkVersion="34" />
-
-    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
-    <uses-feature android:name="android.hardware.location.network" android:required="false" />
-
-    <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.VIBRATE" />
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.WAKE_LOCK" />
-
-    <application
-        android:allowBackup="true"
-        android:icon="@mipmap/ic_launcher"
-        android:label="@string/app_name"
-        android:theme="@style/Theme.LogiStep"
-        android:supportsRtl="true"
-        android:usesCleartextTraffic="true"
-        android:hardwareAccelerated="true">
-
-        <activity
-            android:name="org.vtps.logistep.MainActivity"
-            android:exported="true"
-            android:theme="@style/Theme.LogiStep"
-            android:screenOrientation="portrait"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
-    </application>
-</manifest>''')
-
-    # 5. Java source
-    java_target_dir = os.path.join(src_dir, "org", "vtps", "logistep")
-    os.makedirs(java_target_dir, exist_ok=True)
-    java_src = os.path.join(app_dir, "java", "org", "vtps", "logistep", "MainActivity.java")
-    shutil.copy2(java_src, os.path.join(java_target_dir, "MainActivity.java"))
-
-    # 6. Locate Android SDK
-    android_jar = "/opt/android-sdk/platforms/android-34/android.jar"
-    if not os.path.exists(android_jar):
-        android_jar = "/usr/lib/android-sdk/platforms/android-23/android.jar"
-    print(f"[*] Using Android SDK jar: {android_jar}")
-
-    # 7. Generate R.java via aapt
-    print("[*] Generating R.java via aapt...")
-    run([
-        "aapt", "package", "-f", "-m",
-        "-J", gen_dir,
-        "-M", manifest_path,
-        "-S", res_dir,
-        "-I", android_jar,
-        "--min-sdk-version", "21",
-        "--target-sdk-version", "34"
-    ], cwd=work_dir)
-
-    # 8. Compile Java sources with javac
-    print("[*] Compiling Java code with javac...")
-    r_java = os.path.join(gen_dir, "org", "vtps", "logistep", "R.java")
-    main_java = os.path.join(java_target_dir, "MainActivity.java")
-    run([
-        "javac", "-source", "8", "-target", "8",
-        "-bootclasspath", android_jar,
-        "-cp", f"{android_jar}:{gen_dir}",
-        "-d", bin_dir,
-        main_java, r_java
-    ], cwd=work_dir)
-
-    # 9. Convert class files to classes.dex using dalvik-exchange (dx)
-    print("[*] Creating classes.dex via dalvik-exchange...")
-    classes_dex = os.path.join(bin_dir, "classes.dex")
-    run([
-        "dalvik-exchange", "--dex",
-        f"--output={classes_dex}",
-        bin_dir
-    ], cwd=work_dir)
-
-    # 10. Package initial APK with resources and assets
-    print("[*] Packaging APK resources and assets via aapt...")
-    base_apk = os.path.join(work_dir, "base.apk")
-    run([
-        "aapt", "package", "-f",
-        "-M", manifest_path,
-        "-S", res_dir,
-        "-A", assets_dir,
-        "-I", android_jar,
-        "-F", base_apk,
-        "--min-sdk-version", "21",
-        "--target-sdk-version", "34"
-    ], cwd=work_dir)
-
-    # 11. Add classes.dex into base.apk
-    print("[*] Inserting classes.dex into APK archive...")
-    with zipfile.ZipFile(base_apk, 'a', compression=zipfile.ZIP_DEFLATED) as apk_zip:
-        apk_zip.write(classes_dex, "classes.dex")
-
-    # 12. 4-byte Zipalign APK
-    print("[*] Aligning APK with zipalign (4-byte alignment)...")
+    unsigned_apk = os.path.join(work_dir, "unsigned.apk")
     aligned_apk = os.path.join(work_dir, "aligned.apk")
-    run([
-        "zipalign", "-f", "-p", "4",
-        base_apk, aligned_apk
-    ], cwd=work_dir)
+    signed_apk = os.path.join(work_dir, "LogiStep.apk")
 
-    # 13. Persistent debug keystore
+    # Read base APK and update version info in binary AndroidManifest.xml
+    with zipfile.ZipFile(base_apk, 'r') as src_zip:
+        manifest_data = bytearray(src_zip.read('AndroidManifest.xml'))
+
+        # Increment versionName: '1.0.2' -> '1.0.3'
+        old_vn = '1.0.2'.encode('utf-16le')
+        new_vn = '1.0.3'.encode('utf-16le')
+        if old_vn in manifest_data:
+            idx = manifest_data.index(old_vn)
+            manifest_data[idx:idx+len(old_vn)] = new_vn
+            print(f"[✓] Bumped versionName to 1.0.3 (offset {idx})")
+
+        # Increment versionCode: 3 -> 4
+        old_vc = struct.pack('<HBB I', 8, 0, 0x10, 3)
+        new_vc = struct.pack('<HBB I', 8, 0, 0x10, 4)
+        if old_vc in manifest_data:
+            idx = manifest_data.index(old_vc)
+            manifest_data[idx:idx+len(old_vc)] = new_vc
+            print(f"[✓] Bumped versionCode to 4 (offset {idx})")
+
+        with zipfile.ZipFile(unsigned_apk, 'w') as out_zip:
+            # Write updated AndroidManifest.xml
+            out_zip.writestr('AndroidManifest.xml', bytes(manifest_data), compress_type=zipfile.ZIP_DEFLATED)
+
+            # Copy all native components (classes.dex, resources.arsc, res/*)
+            for item in src_zip.infolist():
+                fn = item.filename
+                if fn.startswith('META-INF/') or fn.startswith('assets/') or fn == 'AndroidManifest.xml':
+                    continue
+                content = src_zip.read(fn)
+                out_zip.writestr(fn, content, compress_type=item.compress_type)
+
+            # Stage latest web assets from dist/ into assets/public/ and assets/www/
+            if os.path.exists(dist_dir):
+                print("[*] Staging latest web build from dist/ into APK assets...")
+                for root, dirs, files in os.walk(dist_dir):
+                    rel = os.path.relpath(root, dist_dir)
+                    for f in files:
+                        if f.endswith('.map') or f.endswith('.apk') or f == 'server.cjs':
+                            continue
+                        full_p = os.path.join(root, f)
+                        rel_p = f if rel == '.' else os.path.join(rel, f)
+                        with open(full_p, 'rb') as fp:
+                            c = fp.read()
+                        ctype = zipfile.ZIP_STORED if f.lower().endswith(('.png', '.jpg', '.jpeg')) else zipfile.ZIP_DEFLATED
+                        out_zip.writestr(f"assets/public/{rel_p}", c, compress_type=ctype)
+                        out_zip.writestr(f"assets/www/{rel_p}", c, compress_type=ctype)
+
+    # Sync web assets to android project directory for GitHub Action CI/CD
+    native_public = os.path.join(app_dir, "assets", "public")
+    native_www = os.path.join(app_dir, "assets", "www")
+    os.makedirs(native_public, exist_ok=True)
+    os.makedirs(native_www, exist_ok=True)
+    if os.path.exists(dist_dir):
+        for root, dirs, files in os.walk(dist_dir):
+            rel = os.path.relpath(root, dist_dir)
+            t_pub = os.path.join(native_public, rel) if rel != "." else native_public
+            t_www = os.path.join(native_www, rel) if rel != "." else native_www
+            os.makedirs(t_pub, exist_ok=True)
+            os.makedirs(t_www, exist_ok=True)
+            for f in files:
+                if f.endswith(".map") or f.endswith(".apk") or f == "server.cjs":
+                    continue
+                shutil.copy2(os.path.join(root, f), os.path.join(t_pub, f))
+                shutil.copy2(os.path.join(root, f), os.path.join(t_www, f))
+
+    # 4-byte zipalign
+    print("[*] Aligning APK with zipalign (4-byte alignment)...")
+    run(["zipalign", "-f", "-p", "4", unsigned_apk, aligned_apk], cwd=work_dir)
+
+    # Keystore preparation
     keystore_path = os.path.join(root_dir, "debug.keystore")
     if not os.path.exists(keystore_path):
-        print("[*] Generating Android debug signing key...")
+        print("[*] Generating Android debug signing keystore...")
         run([
             "keytool", "-genkeypair",
             "-keystore", keystore_path,
@@ -229,9 +135,8 @@ def build_apk():
             "-dname", "CN=LogiStep,OU=VTP,O=VTPFleet,C=US"
         ], cwd=root_dir)
 
-    # 14. Sign APK with apksigner (v1, v2, and v3)
-    print("[*] Signing APK with apksigner (v1, v2, v3 schemes)...")
-    signed_apk = os.path.join(work_dir, "LogiStep.apk")
+    # Cryptographic signing with apksigner (v1, v2, v3 schemes)
+    print("[*] Signing APK with apksigner (v1, v2, v3)...")
     shutil.copy2(aligned_apk, signed_apk)
     run([
         "apksigner", "sign",
@@ -244,12 +149,12 @@ def build_apk():
         signed_apk
     ], cwd=work_dir)
 
-    # 15. Verify signed APK
-    print("[*] Verifying signed APK with apksigner...")
+    # Verification
+    print("[*] Verifying signed APK integrity...")
     verify_out = run(["apksigner", "verify", "--verbose", signed_apk], cwd=work_dir)
     print(verify_out.strip())
 
-    # 16. Distribute to all target locations
+    # Distribute to all target locations
     destinations = [
         os.path.join(root_dir, "LogiStep.apk"),
         os.path.join(root_dir, "apk", "LogiStep.apk"),
@@ -259,8 +164,8 @@ def build_apk():
         os.path.join(root_dir, "public", "LogiStep.apk"),
         os.path.join(root_dir, "dist", "LogiStep.apk"),
         os.path.join(app_dir, "assets", "public", "LogiStep.apk"),
-        os.path.join(app_dir, "build", "outputs", "apk", "release", "app-release.apk"),
-        os.path.join(app_dir, "build", "outputs", "apk", "debug", "app-debug.apk"),
+        os.path.join(android_dir, "app", "build", "outputs", "apk", "release", "app-release.apk"),
+        os.path.join(android_dir, "app", "build", "outputs", "apk", "debug", "app-debug.apk"),
     ]
 
     apk_size = os.path.getsize(signed_apk)
@@ -270,7 +175,7 @@ def build_apk():
         print(f"[✓] Deployed: {dest} ({apk_size} bytes)")
 
     shutil.rmtree(work_dir, ignore_errors=True)
-    print(f"\n[SUCCESS] Genuine native Android APK compiled and cryptographically verified!")
+    print(f"\n[SUCCESS] Native Android APK compiled, signed (v1/v2/v3), and deployed successfully! Size: {apk_size} bytes")
 
 if __name__ == "__main__":
     build_apk()

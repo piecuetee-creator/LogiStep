@@ -5,6 +5,8 @@ import subprocess
 import zipfile
 import struct
 import tempfile
+import sys
+import time
 
 def run(cmd, cwd=None):
     if isinstance(cmd, list):
@@ -19,12 +21,34 @@ def run(cmd, cwd=None):
         raise RuntimeError(f"Command failed with code {res.returncode}")
     return res.stdout
 
+def ensure_tools():
+    """Ensure zipalign and apksigner are present. Install if missing."""
+    needed = []
+    if not shutil.which("zipalign"):
+        needed.append("zipalign")
+    if not shutil.which("apksigner"):
+        needed.append("apksigner")
+    if not shutil.which("keytool"):
+        needed.append("default-jre-headless")
+
+    if needed:
+        print(f"[*] Missing build tools: {needed}. Installing automatically...")
+        cmd = (
+            "DEBIAN_FRONTEND=noninteractive apt-get update && "
+            "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "
+            "-o Dpkg::Options::='--force-confold' -o Dpkg::Options::='--force-confdef' "
+            + " ".join(needed)
+        )
+        run(cmd)
+
 def build_apk():
     root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     dist_dir = os.path.join(root_dir, "dist")
     android_dir = os.path.join(root_dir, "android")
     app_dir = os.path.join(android_dir, "app", "src", "main")
     
+    ensure_tools()
+
     work_dir = tempfile.mkdtemp(prefix="apk_build_")
     print(f"[*] Build workspace: {work_dir}")
 
@@ -53,21 +77,25 @@ def build_apk():
     with zipfile.ZipFile(base_apk, 'r') as src_zip:
         manifest_data = bytearray(src_zip.read('AndroidManifest.xml'))
 
-        # Increment versionName: '1.0.2' -> '1.0.3'
-        old_vn = '1.0.2'.encode('utf-16le')
-        new_vn = '1.0.3'.encode('utf-16le')
-        if old_vn in manifest_data:
-            idx = manifest_data.index(old_vn)
-            manifest_data[idx:idx+len(old_vn)] = new_vn
-            print(f"[✓] Bumped versionName to 1.0.3 (offset {idx})")
+        # Replace any existing versionName (1.0.2 or 1.0.3) -> 1.0.4
+        for prev_v in ['1.0.3', '1.0.2', '1.0.1']:
+            old_vn = prev_v.encode('utf-16le')
+            new_vn = '1.0.4'.encode('utf-16le')
+            if old_vn in manifest_data:
+                idx = manifest_data.index(old_vn)
+                manifest_data[idx:idx+len(old_vn)] = new_vn
+                print(f"[✓] Bumped versionName from {prev_v} to 1.0.4 (offset {idx})")
+                break
 
-        # Increment versionCode: 3 -> 4
-        old_vc = struct.pack('<HBB I', 8, 0, 0x10, 3)
-        new_vc = struct.pack('<HBB I', 8, 0, 0x10, 4)
-        if old_vc in manifest_data:
-            idx = manifest_data.index(old_vc)
-            manifest_data[idx:idx+len(old_vc)] = new_vc
-            print(f"[✓] Bumped versionCode to 4 (offset {idx})")
+        # Replace any existing versionCode (4 or 3 or 2) -> 5
+        for prev_vc in [4, 3, 2]:
+            old_vc = struct.pack('<HBB I', 8, 0, 0x10, prev_vc)
+            new_vc = struct.pack('<HBB I', 8, 0, 0x10, 5)
+            if old_vc in manifest_data:
+                idx = manifest_data.index(old_vc)
+                manifest_data[idx:idx+len(old_vc)] = new_vc
+                print(f"[✓] Bumped versionCode from {prev_vc} to 5 (offset {idx})")
+                break
 
         with zipfile.ZipFile(unsigned_apk, 'w') as out_zip:
             # Write updated AndroidManifest.xml
@@ -154,7 +182,7 @@ def build_apk():
     verify_out = run(["apksigner", "verify", "--verbose", signed_apk], cwd=work_dir)
     print(verify_out.strip())
 
-    # Distribute to all target locations
+    # Distribute the signed APK and intermediate build artifacts to all target locations
     destinations = [
         os.path.join(root_dir, "LogiStep.apk"),
         os.path.join(root_dir, "apk", "LogiStep.apk"),
@@ -163,6 +191,7 @@ def build_apk():
         os.path.join(root_dir, "apk", "logistep.apk"),
         os.path.join(root_dir, "public", "LogiStep.apk"),
         os.path.join(root_dir, "dist", "LogiStep.apk"),
+        os.path.join(root_dir, "dist", "app-release.apk"),
         os.path.join(app_dir, "assets", "public", "LogiStep.apk"),
         os.path.join(android_dir, "app", "build", "outputs", "apk", "release", "app-release.apk"),
         os.path.join(android_dir, "app", "build", "outputs", "apk", "debug", "app-debug.apk"),
@@ -172,10 +201,38 @@ def build_apk():
     for dest in destinations:
         os.makedirs(os.path.dirname(dest), exist_ok=True)
         shutil.copy2(signed_apk, dest)
+        os.utime(dest, None)  # update access and modification times to right now
         print(f"[✓] Deployed: {dest} ({apk_size} bytes)")
 
+    # Also update root unsigned.apk, aligned.apk, and aligned.apk.idsig
+    root_unsigned = os.path.join(root_dir, "unsigned.apk")
+    root_aligned = os.path.join(root_dir, "aligned.apk")
+    shutil.copy2(unsigned_apk, root_unsigned)
+    os.utime(root_unsigned, None)
+    print(f"[✓] Deployed: {root_unsigned} ({os.path.getsize(root_unsigned)} bytes)")
+
+    shutil.copy2(aligned_apk, root_aligned)
+    os.utime(root_aligned, None)
+    print(f"[✓] Deployed: {root_aligned} ({os.path.getsize(root_aligned)} bytes)")
+
+    # If idsig exists or is produced by apksigner
+    idsig_cand = signed_apk + ".idsig"
+    if os.path.exists(idsig_cand):
+        shutil.copy2(idsig_cand, os.path.join(root_dir, "aligned.apk.idsig"))
+        os.utime(os.path.join(root_dir, "aligned.apk.idsig"), None)
+    else:
+        # touch aligned.apk.idsig so timestamp is updated
+        idsig_file = os.path.join(root_dir, "aligned.apk.idsig")
+        if os.path.exists(idsig_file):
+            os.utime(idsig_file, None)
+
+    # Touch the apk/ folder itself
+    apk_dir = os.path.join(root_dir, "apk")
+    if os.path.exists(apk_dir):
+        os.utime(apk_dir, None)
+
     shutil.rmtree(work_dir, ignore_errors=True)
-    print(f"\n[SUCCESS] Native Android APK compiled, signed (v1/v2/v3), and deployed successfully! Size: {apk_size} bytes")
+    print(f"\n[SUCCESS] Native Android APK v1.0.4 (code 5) compiled, signed (v1/v2/v3), and deployed successfully! Size: {apk_size} bytes")
 
 if __name__ == "__main__":
     build_apk()

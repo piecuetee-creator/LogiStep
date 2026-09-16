@@ -11,6 +11,7 @@ import {
   Cpu,
   Layers,
   CheckCircle2,
+  Lock,
 } from 'lucide-react';
 
 interface Props {
@@ -74,6 +75,10 @@ export const DriverStatusCard: React.FC<Props> = ({
               <span>IMEI:</span>
               <span className="text-orange-400 font-bold tracking-wider">
                 {validateFleetImei(profile.imei).formattedDisplay}
+              </span>
+              <span className="text-[9px] font-sans px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-semibold flex items-center gap-1">
+                <Lock className="w-2.5 h-2.5 text-emerald-400" />
+                <span>Locked</span>
               </span>
               <span className="text-[9px] font-sans px-1.5 py-0.5 rounded bg-orange-500/10 text-orange-300 border border-orange-500/20 font-semibold">
                 Fleet 99002

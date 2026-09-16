@@ -23,6 +23,7 @@ import { SettingsModal } from './components/SettingsModal';
 import { playSuccessChime, playAlertTone } from './utils/audio';
 import { UI_TEXT } from './utils/i18n';
 import { buildLoginPacket, buildLocationPacket, bytesToHex } from './utils/gt06';
+import { buildFleetImei } from './utils/imei';
 import { transmitOverWebSocket } from './utils/websocket';
 import {
   transmitGt06Packet,
@@ -83,15 +84,16 @@ export default function App() {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed.imei && parsed.imei.startsWith('99003')) {
-          parsed.imei = parsed.imei.replace(/^99003/, '99002');
-        }
         if (!parsed.companyCode || parsed.companyCode.length !== 4) parsed.companyCode = '1001';
         if (!parsed.employeeCode || parsed.employeeCode.length !== 4) parsed.employeeCode = '0452';
         if (!parsed.serverDigits || parsed.serverDigits.length !== 2) parsed.serverDigits = '03';
-        if (!parsed.imei || parsed.imei.length !== 15) {
-          parsed.imei = `99002${parsed.companyCode}${parsed.employeeCode}${parsed.serverDigits}`;
-        }
+        // Always enforce locked IMEI matching 99002 + companyCode + employeeCode + serverDigits
+        parsed.imei = buildFleetImei({
+          prefix: '99002',
+          companyCode: parsed.companyCode,
+          employeeCode: parsed.employeeCode,
+          serverDigits: parsed.serverDigits,
+        });
         return parsed;
       } catch {
         return DEFAULT_PROFILE;
@@ -105,8 +107,15 @@ export default function App() {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed.imei && parsed.imei.startsWith('99003')) {
-          parsed.imei = parsed.imei.replace(/^99003/, '99002');
+        const profileSaved = localStorage.getItem('logistep_profile');
+        if (profileSaved) {
+          const parsedProf = JSON.parse(profileSaved);
+          parsed.imei = buildFleetImei({
+            prefix: '99002',
+            companyCode: parsedProf.companyCode || '1001',
+            employeeCode: parsedProf.employeeCode || '0452',
+            serverDigits: parsedProf.serverDigits || '03',
+          });
         }
         return parsed;
       } catch {
@@ -287,11 +296,21 @@ export default function App() {
   }, [activeConfirmStep, activeResultRecord, isHistoryOpen, isSettingsOpen, isLogsOpen, isLocationPickerOpen]);
 
   const handleSaveSettings = (newProfile: DriverProfile, newConfig: SocketConfig) => {
-    setProfile(newProfile);
-    setSocketConfig(newConfig);
-    localStorage.setItem('logistep_profile', JSON.stringify(newProfile));
-    localStorage.setItem('logistep_config', JSON.stringify(newConfig));
-    addLog('INFO', `Fleet profile updated. Target IMEI: ${newProfile.imei}`);
+    // Enforce locked IMEI strictly computed from companyCode and employeeCode
+    const lockedImei = buildFleetImei({
+      prefix: '99002',
+      companyCode: newProfile.companyCode,
+      employeeCode: newProfile.employeeCode,
+      serverDigits: newProfile.serverDigits,
+    });
+    const finalizedProfile = { ...newProfile, imei: lockedImei };
+    const finalizedConfig = { ...newConfig, imei: lockedImei };
+
+    setProfile(finalizedProfile);
+    setSocketConfig(finalizedConfig);
+    localStorage.setItem('logistep_profile', JSON.stringify(finalizedProfile));
+    localStorage.setItem('logistep_config', JSON.stringify(finalizedConfig));
+    addLog('INFO', `Fleet profile updated. Locked IMEI: ${lockedImei}`);
     showAndroidToast('Driver profile updated');
   };
 

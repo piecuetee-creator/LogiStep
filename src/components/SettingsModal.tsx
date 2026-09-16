@@ -19,6 +19,7 @@ import {
   Server,
   Radio,
   Loader2,
+  Lock,
 } from 'lucide-react';
 
 interface Props {
@@ -52,12 +53,14 @@ export const SettingsModal: React.FC<Props> = ({
   const [employeeCode, setEmployeeCode] = useState(profile.employeeCode || '0452');
   const [serverDigits, setServerDigits] = useState(profile.serverDigits || '03');
 
-  // If previous stored IMEI had 99003, seamlessly initialize with 99002
-  const initialImei = profile.imei?.startsWith('99003')
-    ? profile.imei.replace(/^99003/, '99002')
-    : profile.imei || '990021001045203';
-  const [imei, setImei] = useState(initialImei);
-  const [autoSyncFleet, setAutoSyncFleet] = useState(true);
+  // IMEI is locked & auto-calculated strictly from 99002 + Company Code + Employee Code + Server Digits
+  // (Cannot be manually changed or corrupted once user inserts company code & employee code, matching Presence App)
+  const imei = buildFleetImei({
+    prefix: '99002',
+    companyCode: companyCode || '1001',
+    employeeCode: employeeCode || '0452',
+    serverDigits: serverDigits || '03',
+  });
 
   const [tcpHost, setTcpHost] = useState(socketConfig.tcpHost);
   const [tcpPort, setTcpPort] = useState(socketConfig.tcpPort.toString());
@@ -69,50 +72,19 @@ export const SettingsModal: React.FC<Props> = ({
   // Real-time IMEI validation against Fleet criteria
   const imeiCheck = validateFleetImei(imei);
 
-  // When auto-sync is on, recalculate IMEI using the 99002 formula: 99002 + Company (4D) + Employee (4D) + Server (2D)
-  const handleApplyFleetPattern = (
-    cCode?: string,
-    eCode?: string,
-    sDigits?: string
-  ) => {
-    const calculated = buildFleetImei({
-      prefix: '99002',
-      companyCode: cCode !== undefined ? cCode : companyCode,
-      employeeCode: eCode !== undefined ? eCode : employeeCode,
-      serverDigits: sDigits !== undefined ? sDigits : serverDigits,
-    });
-    setImei(calculated);
-  };
-
   const handleCompanyCodeChange = (val: string) => {
     const clean = val.replace(/\D/g, '').slice(0, 4);
     setCompanyCode(clean);
-    if (autoSyncFleet) {
-      handleApplyFleetPattern(clean, employeeCode, serverDigits);
-    }
   };
 
   const handleEmployeeCodeChange = (val: string) => {
     const clean = val.replace(/\D/g, '').slice(0, 4);
     setEmployeeCode(clean);
-    if (autoSyncFleet) {
-      handleApplyFleetPattern(companyCode, clean, serverDigits);
-    }
   };
 
   const handleServerDigitsChange = (val: string) => {
     const clean = val.replace(/\D/g, '').slice(0, 2);
     setServerDigits(clean);
-    if (autoSyncFleet) {
-      handleApplyFleetPattern(companyCode, employeeCode, clean);
-    }
-  };
-
-  const handleManualImeiChange = (val: string) => {
-    setImei(val);
-    if (autoSyncFleet) {
-      setAutoSyncFleet(false);
-    }
   };
 
   const handleTestLoginPacket = async () => {
@@ -289,18 +261,10 @@ export const SettingsModal: React.FC<Props> = ({
                 <Shield className="w-3.5 h-3.5" />
                 Fleet IMEI Formula (99002 Series)
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setAutoSyncFleet(true);
-                  handleApplyFleetPattern();
-                }}
-                className="flex items-center gap-1 text-[11px] font-bold text-orange-400 hover:text-orange-300 transition-colors"
-                title="Regenerate IMEI using 99002 + Company + Employee + Server"
-              >
-                <Sparkles className="w-3 h-3" />
-                <span>Apply 99002 Formula</span>
-              </button>
+              <div className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-400 bg-emerald-950/40 border border-emerald-500/30 px-2.5 py-1 rounded-lg">
+                <Lock className="w-3 h-3" />
+                <span>Auto-Locked to Codes</span>
+              </div>
             </div>
 
             {/* Formula Banner */}
@@ -373,38 +337,37 @@ export const SettingsModal: React.FC<Props> = ({
               </div>
             </div>
 
-            {/* Main IMEI Field */}
+            {/* Main IMEI Field (Locked / Read-Only, strictly bound to Company Code & Employee Code) */}
             <div>
-              <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center justify-between mb-1.5">
                 <label className="block text-xs font-medium text-slate-400">
                   {t.imeiLabel} (15 Digits)
                 </label>
-                <label className="flex items-center gap-1.5 text-[11px] text-slate-400 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={autoSyncFleet}
-                    onChange={(e) => {
-                      setAutoSyncFleet(e.target.checked);
-                      if (e.target.checked) handleApplyFleetPattern();
-                    }}
-                    className="w-3.5 h-3.5 rounded bg-slate-800 border-slate-700 text-orange-500 focus:ring-0"
-                  />
-                  <span>Auto-sync with 99002 Formula</span>
-                </label>
+                <div className="flex items-center gap-1.5 text-[11px] text-emerald-400 font-semibold">
+                  <Lock className="w-3 h-3 text-emerald-400" />
+                  <span>Locked (Auto-generated from Codes)</span>
+                </div>
               </div>
 
-              <input
-                type="text"
-                value={imei}
-                onChange={(e) => handleManualImeiChange(e.target.value)}
-                maxLength={15}
-                placeholder="990021001045203"
-                className={`w-full px-3 py-2 bg-slate-900 border rounded-xl text-sm font-mono font-bold focus:outline-none transition-colors ${
-                  imeiCheck.isValid
-                    ? 'border-orange-500/50 text-orange-300 focus:border-orange-500'
-                    : 'border-red-500/50 text-red-300 focus:border-red-500'
-                }`}
-              />
+              <div className="relative">
+                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-400 pointer-events-none">
+                  <Lock className="w-4 h-4" />
+                </div>
+                <input
+                  type="text"
+                  value={imei}
+                  readOnly
+                  tabIndex={-1}
+                  placeholder="990021001045203"
+                  className="w-full pl-9 pr-24 py-2.5 bg-slate-950/90 border border-emerald-500/40 rounded-xl text-sm font-mono font-bold text-orange-300 select-all cursor-not-allowed tracking-wider shadow-inner"
+                  title="IMEI is locked and automatically generated from 99002 + Company Code + Employee Code + Server Code"
+                />
+                <div className="absolute right-2.5 top-1/2 -translate-y-1/2">
+                  <span className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-bold uppercase tracking-wider">
+                    Locked
+                  </span>
+                </div>
+              </div>
 
               {/* Color Segments Visualizer */}
               {imei.length === 15 && (

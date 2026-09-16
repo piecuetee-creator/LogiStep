@@ -120,7 +120,7 @@ def build_apk():
 
         # Replace any existing versionName
         new_vn_bytes = target_vn.encode('utf-16le')
-        for prev_v in ['1.0.4', '1.0.3', '1.0.2', '1.0.1']:
+        for prev_v in ['1.0.6', '1.0.5', '1.0.4', '1.0.3', '1.0.2', '1.0.1']:
             old_vn = prev_v.encode('utf-16le')
             if old_vn in manifest_data:
                 idx = manifest_data.index(old_vn)
@@ -128,14 +128,27 @@ def build_apk():
                 print(f"[✓] Bumped versionName from {prev_v} to {target_vn} (offset {idx})")
                 break
 
-        # Replace any existing versionCode
-        new_vc_bytes = struct.pack('<HBB I', 8, 0, 0x10, target_vc)
-        for prev_vc in [5, 4, 3, 2, 1]:
-            old_vc = struct.pack('<HBB I', 8, 0, 0x10, prev_vc)
-            if old_vc in manifest_data:
-                idx = manifest_data.index(old_vc)
-                manifest_data[idx:idx+len(old_vc)] = new_vc_bytes
-                print(f"[✓] Bumped versionCode from {prev_vc} to {target_vc} (offset {idx})")
+        # Update versionCode specifically in manifest attribute (name_idx == 0)
+        updated_vc = False
+        for i in range(len(manifest_data) - 20):
+            name_idx, val_str_idx, atype, adata = struct.unpack('<IIII', manifest_data[i+4 : i+20])
+            if name_idx == 0 and atype == 0x10000008:
+                struct.pack_into('<I', manifest_data, i+16, target_vc)
+                print(f"[✓] Set versionCode to {target_vc} (was {adata} at offset {i})")
+                updated_vc = True
+                break
+        if not updated_vc:
+            print(f"[!] Warning: versionCode attribute (name_idx=0) not found")
+
+        # Force screenOrientation to portrait (ActivityInfo.SCREEN_ORIENTATION_PORTRAIT = 1)
+        # Prevents unintended landscape orientation across devices
+        patched_orientation = False
+        for i in range(len(manifest_data) - 20):
+            name_idx, val_str_idx, atype, adata = struct.unpack('<IIII', manifest_data[i+4 : i+20])
+            if name_idx == 16 and atype == 0x10000008:
+                struct.pack_into('<I', manifest_data, i+16, 1)
+                print(f"[✓] Enforced screenOrientation=portrait (1) in binary AndroidManifest.xml (was {adata} at offset {i})")
+                patched_orientation = True
                 break
 
         with zipfile.ZipFile(unsigned_apk, 'w') as out_zip:

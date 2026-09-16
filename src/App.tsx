@@ -20,6 +20,7 @@ import { TripHistoryModal } from './components/TripHistoryModal';
 import { SocketLogsModal } from './components/SocketLogsModal';
 import { LocationPickerModal } from './components/LocationPickerModal';
 import { SettingsModal } from './components/SettingsModal';
+import { LoginPage } from './components/LoginPage';
 import { playSuccessChime, playAlertTone } from './utils/audio';
 import { UI_TEXT } from './utils/i18n';
 import { buildLoginPacket, buildLocationPacket, bytesToHex } from './utils/gt06';
@@ -43,15 +44,15 @@ const DEFAULT_PROFILE: DriverProfile = {
   consignmentNo: 'CN-884920',
   companyCode: '1001',
   employeeCode: '0452',
-  serverDigits: '03',
-  imei: '990021001045203', // 99002 (5D) + company code (4D: 1001) + employee code (4D: 0452) + server (2D: 03)
+  serverDigits: '01',
+  imei: '990021001045201', // 99002 (5D) + company code (4D: 1001) + employee code (4D: 0452) + server (2D: 01)
 };
 
 const DEFAULT_SOCKET_CONFIG: SocketConfig = {
   tcpHost: 'avl.vtps.org',
   tcpPort: 5200,
   wsUrl: 'ws://avl.vtps.org:5200',
-  imei: '990021001045203',
+  imei: '990021001045201',
   useWebSocket: true,
   timeoutMs: 3500,
 };
@@ -78,6 +79,11 @@ export default function App() {
     return (localStorage.getItem('logistep_lang') as LanguageCode) || 'en';
   });
 
+  // State: Authentication / Login Status
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
+    return localStorage.getItem('logistep_is_logged_in') === 'true';
+  });
+
   // State: Driver profile & Socket config
   const [profile, setProfile] = useState<DriverProfile>(() => {
     const saved = localStorage.getItem('logistep_profile');
@@ -86,7 +92,7 @@ export default function App() {
         const parsed = JSON.parse(saved);
         if (!parsed.companyCode || parsed.companyCode.length !== 4) parsed.companyCode = '1001';
         if (!parsed.employeeCode || parsed.employeeCode.length !== 4) parsed.employeeCode = '0452';
-        if (!parsed.serverDigits || parsed.serverDigits.length !== 2) parsed.serverDigits = '03';
+        if (!parsed.serverDigits || parsed.serverDigits.length !== 2) parsed.serverDigits = '01';
         // Always enforce locked IMEI matching 99002 + companyCode + employeeCode + serverDigits
         parsed.imei = buildFleetImei({
           prefix: '99002',
@@ -114,7 +120,7 @@ export default function App() {
             prefix: '99002',
             companyCode: parsedProf.companyCode || '1001',
             employeeCode: parsedProf.employeeCode || '0452',
-            serverDigits: parsedProf.serverDigits || '03',
+            serverDigits: parsedProf.serverDigits || '01',
           });
         }
         return parsed;
@@ -314,6 +320,56 @@ export default function App() {
     showAndroidToast('Driver profile updated');
   };
 
+  const handleLogin = (credentials: {
+    mobile: string;
+    companyCode: string;
+    employeeCode: string;
+    driverName?: string;
+    vehicleNumber?: string;
+  }) => {
+    const activeServerDigits = profile.serverDigits || '01';
+    const computedImei = buildFleetImei({
+      prefix: '99002',
+      companyCode: credentials.companyCode,
+      employeeCode: credentials.employeeCode,
+      serverDigits: activeServerDigits,
+    });
+
+    const updatedProfile: DriverProfile = {
+      ...profile,
+      driverPhone: credentials.mobile,
+      companyCode: credentials.companyCode,
+      employeeCode: credentials.employeeCode,
+      driverName: credentials.driverName || profile.driverName,
+      vehicleNumber: credentials.vehicleNumber || profile.vehicleNumber,
+      serverDigits: activeServerDigits,
+      imei: computedImei,
+    };
+
+    const updatedSocketConfig: SocketConfig = {
+      ...socketConfig,
+      imei: computedImei,
+    };
+
+    setProfile(updatedProfile);
+    setSocketConfig(updatedSocketConfig);
+    setIsLoggedIn(true);
+
+    localStorage.setItem('logistep_profile', JSON.stringify(updatedProfile));
+    localStorage.setItem('logistep_config', JSON.stringify(updatedSocketConfig));
+    localStorage.setItem('logistep_is_logged_in', 'true');
+
+    addLog('INFO', `Driver logged in. Mobile: ${credentials.mobile}, Co: ${credentials.companyCode}, Emp: ${credentials.employeeCode}`);
+    showAndroidToast(`Welcome ${updatedProfile.driverName}`);
+  };
+
+  const handleLogout = () => {
+    setIsLoggedIn(false);
+    localStorage.removeItem('logistep_is_logged_in');
+    showAndroidToast('Signed out');
+    addLog('INFO', 'Driver signed out.');
+  };
+
   // Transmit Trip Action Step
   const handleConfirmStep = async () => {
     if (!activeConfirmStep) return;
@@ -469,6 +525,24 @@ export default function App() {
 
   const latestRecord = tripRecords.length > 0 ? tripRecords[tripRecords.length - 1] : null;
 
+  // Show Login Page if driver / employee is not signed in
+  if (!isLoggedIn) {
+    return (
+      <LoginPage
+        onLogin={handleLogin}
+        lang={lang}
+        onLangChange={handleLangChange}
+        initialValues={{
+          mobile: profile.driverPhone,
+          companyCode: profile.companyCode,
+          employeeCode: profile.employeeCode,
+          driverName: profile.driverName,
+          vehicleNumber: profile.vehicleNumber,
+        }}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
       {/* Top Application Header */}
@@ -482,6 +556,7 @@ export default function App() {
         onOpenHistory={() => setIsHistoryOpen(true)}
         onOpenLogs={() => setIsLogsOpen(true)}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        onLogout={handleLogout}
       />
 
       {/* Main Container */}
@@ -629,6 +704,7 @@ export default function App() {
         socketConfig={socketConfig}
         onSave={handleSaveSettings}
         lang={lang}
+        onLogout={handleLogout}
       />
       {/* Native Android Bottom Action Bar */}
       <AndroidNavBar

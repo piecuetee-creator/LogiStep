@@ -9,6 +9,7 @@ import {
   Settings,
   Radio,
   Sparkles,
+  LogOut,
 } from 'lucide-react';
 
 interface Props {
@@ -21,6 +22,7 @@ interface Props {
   onOpenHistory: () => void;
   onOpenLogs: () => void;
   onOpenSettings: () => void;
+  onLogout?: () => void;
 }
 
 export const LogiStepHeader: React.FC<Props> = ({
@@ -33,6 +35,7 @@ export const LogiStepHeader: React.FC<Props> = ({
   onOpenHistory,
   onOpenLogs,
   onOpenSettings,
+  onLogout,
 }) => {
   const t = UI_TEXT[lang] || UI_TEXT.en;
   const isRtl = lang === 'ur' || lang === 'ps';
@@ -151,6 +154,18 @@ export const LogiStepHeader: React.FC<Props> = ({
             >
               <Settings className="w-5 h-5" />
             </button>
+
+            {/* Logout / Switch User button */}
+            {onLogout && (
+              <button
+                type="button"
+                onClick={onLogout}
+                className="p-2 rounded-xl bg-slate-800/80 hover:bg-red-950/60 text-slate-300 hover:text-red-400 border border-slate-700/70 hover:border-red-500/50 transition-colors"
+                title={lang === 'ur' ? 'صارف تبدیل کریں / لاگ آؤٹ' : 'Switch User / Logout'}
+              >
+                <LogOut className="w-5 h-5" />
+              </button>
+            )}
           </div>
         </div>
 

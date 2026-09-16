@@ -53,6 +53,24 @@ jobs:
           cd android
           ./gradlew assembleRelease assembleDebug --no-daemon --stacktrace
 
+      - name: Sync APK binaries to repository apk directory
+        run: |
+          mkdir -p apk
+          cp android/app/build/outputs/apk/release/*.apk apk/LogiStep.apk || true
+          cp android/app/build/outputs/apk/release/*.apk apk/app-release.apk || true
+          cp android/app/build/outputs/apk/release/*.apk apk/logistep.apk || true
+          cp android/app/build/outputs/apk/debug/*.apk apk/app-debug.apk || true
+          cp apk/LogiStep.apk LogiStep.apk || true
+
+      - name: Commit updated APKs to repository
+        if: github.event_name == 'push'
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add apk/*.apk LogiStep.apk
+          git diff --staged --quiet || (git commit -m "Auto-update compiled Android APKs [skip ci]" && git push origin HEAD:${{ github.ref_name }})
+        continue-on-error: true
+
       - name: Upload Release APK
         uses: actions/upload-artifact@v4
         with:

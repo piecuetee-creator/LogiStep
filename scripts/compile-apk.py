@@ -7,6 +7,7 @@ import struct
 import tempfile
 import sys
 import time
+import re
 
 def run(cmd, cwd=None):
     if isinstance(cmd, list):
@@ -28,10 +29,16 @@ def ensure_tools():
         needed.append("zipalign")
     if not shutil.which("apksigner"):
         needed.append("apksigner")
-    if not shutil.which("keytool"):
+    if not shutil.which("keytool") or not shutil.which("java"):
         needed.append("default-jre-headless")
 
     if needed:
+        if os.getenv("GITHUB_ACTIONS") == "true":
+            print(f"[*] In GitHub Actions CI environment. Tooling handled by Gradle workflow.")
+            return False
+        if os.geteuid() != 0:
+            print(f"[*] Non-root environment, skipping apt-get for {needed}")
+            return False
         print(f"[*] Missing build tools: {needed}. Installing automatically...")
         cmd = (
             "DEBIAN_FRONTEND=noninteractive apt-get update && "
@@ -39,7 +46,27 @@ def ensure_tools():
             "-o Dpkg::Options::='--force-confold' -o Dpkg::Options::='--force-confdef' "
             + " ".join(needed)
         )
-        run(cmd)
+        try:
+            run(cmd)
+        except Exception as e:
+            print(f"[!] Warning: tool installation failed: {e}")
+            return False
+    return True
+
+def get_gradle_version_info(android_dir):
+    gradle_file = os.path.join(android_dir, "app", "build.gradle")
+    version_code = 6
+    version_name = "1.0.5"
+    if os.path.exists(gradle_file):
+        with open(gradle_file, "r") as f:
+            content = f.read()
+        vc_match = re.search(r'versionCode\s+(\d+)', content)
+        vn_match = re.search(r'versionName\s+["\']([^"\']+)["\']', content)
+        if vc_match:
+            version_code = int(vc_match.group(1))
+        if vn_match:
+            version_name = vn_match.group(1)
+    return version_code, version_name
 
 def build_apk():
     root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -47,7 +74,21 @@ def build_apk():
     android_dir = os.path.join(root_dir, "android")
     app_dir = os.path.join(android_dir, "app", "src", "main")
     
-    ensure_tools()
+    tools_ready = ensure_tools()
+    if not tools_ready and (not shutil.which("zipalign") or not shutil.which("apksigner")):
+        if os.getenv("GITHUB_ACTIONS") == "true":
+            print("[*] Skipping custom python build in GitHub Actions - Gradle will build the native APK.")
+            return
+        print("[!] zipalign or apksigner not found. Will attempt packaging.")
+
+    target_vc, target_vn = get_gradle_version_info(android_dir)
+    print(f"[*] Target version: {target_vn} (code {target_vc})")
+
+    # Ensure web assets exist in dist/
+    index_html = os.path.join(dist_dir, "index.html")
+    if not os.path.exists(index_html):
+        print("[*] dist/index.html not found, running vite build first...")
+        run("npx vite build", cwd=root_dir)
 
     work_dir = tempfile.mkdtemp(prefix="apk_build_")
     print(f"[*] Build workspace: {work_dir}")
@@ -77,24 +118,24 @@ def build_apk():
     with zipfile.ZipFile(base_apk, 'r') as src_zip:
         manifest_data = bytearray(src_zip.read('AndroidManifest.xml'))
 
-        # Replace any existing versionName (1.0.2 or 1.0.3) -> 1.0.4
-        for prev_v in ['1.0.3', '1.0.2', '1.0.1']:
+        # Replace any existing versionName
+        new_vn_bytes = target_vn.encode('utf-16le')
+        for prev_v in ['1.0.4', '1.0.3', '1.0.2', '1.0.1']:
             old_vn = prev_v.encode('utf-16le')
-            new_vn = '1.0.4'.encode('utf-16le')
             if old_vn in manifest_data:
                 idx = manifest_data.index(old_vn)
-                manifest_data[idx:idx+len(old_vn)] = new_vn
-                print(f"[✓] Bumped versionName from {prev_v} to 1.0.4 (offset {idx})")
+                manifest_data[idx:idx+len(old_vn)] = new_vn_bytes
+                print(f"[✓] Bumped versionName from {prev_v} to {target_vn} (offset {idx})")
                 break
 
-        # Replace any existing versionCode (4 or 3 or 2) -> 5
-        for prev_vc in [4, 3, 2]:
+        # Replace any existing versionCode
+        new_vc_bytes = struct.pack('<HBB I', 8, 0, 0x10, target_vc)
+        for prev_vc in [5, 4, 3, 2, 1]:
             old_vc = struct.pack('<HBB I', 8, 0, 0x10, prev_vc)
-            new_vc = struct.pack('<HBB I', 8, 0, 0x10, 5)
             if old_vc in manifest_data:
                 idx = manifest_data.index(old_vc)
-                manifest_data[idx:idx+len(old_vc)] = new_vc
-                print(f"[✓] Bumped versionCode from {prev_vc} to 5 (offset {idx})")
+                manifest_data[idx:idx+len(old_vc)] = new_vc_bytes
+                print(f"[✓] Bumped versionCode from {prev_vc} to {target_vc} (offset {idx})")
                 break
 
         with zipfile.ZipFile(unsigned_apk, 'w') as out_zip:
@@ -112,6 +153,7 @@ def build_apk():
             # Stage latest web assets from dist/ into assets/public/ and assets/www/
             if os.path.exists(dist_dir):
                 print("[*] Staging latest web build from dist/ into APK assets...")
+                count = 0
                 for root, dirs, files in os.walk(dist_dir):
                     rel = os.path.relpath(root, dist_dir)
                     for f in files:
@@ -121,9 +163,11 @@ def build_apk():
                         rel_p = f if rel == '.' else os.path.join(rel, f)
                         with open(full_p, 'rb') as fp:
                             c = fp.read()
-                        ctype = zipfile.ZIP_STORED if f.lower().endswith(('.png', '.jpg', '.jpeg')) else zipfile.ZIP_DEFLATED
+                        ctype = zipfile.ZIP_STORED if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp')) else zipfile.ZIP_DEFLATED
                         out_zip.writestr(f"assets/public/{rel_p}", c, compress_type=ctype)
                         out_zip.writestr(f"assets/www/{rel_p}", c, compress_type=ctype)
+                        count += 1
+                print(f"[✓] Packaged {count} web distribution files into assets/public/ and assets/www/")
 
     # Sync web assets to android project directory for GitHub Action CI/CD
     native_public = os.path.join(app_dir, "assets", "public")
@@ -232,7 +276,7 @@ def build_apk():
         os.utime(apk_dir, None)
 
     shutil.rmtree(work_dir, ignore_errors=True)
-    print(f"\n[SUCCESS] Native Android APK v1.0.4 (code 5) compiled, signed (v1/v2/v3), and deployed successfully! Size: {apk_size} bytes")
+    print(f"\n[SUCCESS] Native Android APK v{target_vn} (code {target_vc}) compiled, signed (v1/v2/v3), and deployed successfully! Size: {apk_size} bytes")
 
 if __name__ == "__main__":
     build_apk()

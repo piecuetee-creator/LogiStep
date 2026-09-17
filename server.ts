@@ -3,7 +3,7 @@ import path from 'path';
 import net from 'net';
 import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
-import { buildLoginPacket, buildLocationPacket, bytesToHex, buildAckPacket } from './src/utils/gt06.ts';
+import { buildLoginPacket, buildLocationPacket, bytesToHex, buildAckPacket } from './src/utils/gt06';
 
 const app = express();
 const PORT = 3000;

@@ -90,6 +90,8 @@ export interface TripEventRecord {
   imei: string;
   driverName: string;
   vehicleNumber: string;
+  batteryLevel?: number;
+  isCharging?: boolean;
   txHex?: string;
   rxHex?: string;
   status: 'SUCCESS' | 'FAILED';
@@ -124,6 +126,8 @@ export interface BufferedPacket {
   longitude: number;
   locationName: string;
   imei: string;
+  batteryLevel?: number;
+  isCharging?: boolean;
   txLoginHex: string;
   txLocationHex: string;
   rxHex?: string;

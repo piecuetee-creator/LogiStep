@@ -52,6 +52,8 @@ export const UI_TEXT: Record<LanguageCode, Record<string, string>> = {
     avlPortLabel: 'AVL Port (TCP/WS)',
     saveConfig: 'Save Configuration',
     viewHex: 'Inspect GT06 Hex Frame',
+    battery: 'Device Battery',
+    charging: 'Charging',
   },
   ur: {
     appTitle: 'لاجی اسٹیپ',
@@ -104,6 +106,8 @@ export const UI_TEXT: Record<LanguageCode, Record<string, string>> = {
     avlPortLabel: 'سرور پورٹ',
     saveConfig: 'سیٹنگ محفوظ کریں',
     viewHex: 'ہیکس فریم دیکھیں',
+    battery: 'موبائل بیٹری',
+    charging: 'چارج ہو رہا ہے',
   },
   ps: {
     appTitle: 'لوجی سټیپ',
@@ -156,5 +160,7 @@ export const UI_TEXT: Record<LanguageCode, Record<string, string>> = {
     avlPortLabel: 'د سرور پورټ',
     saveConfig: 'تنظیمات خوندي کړئ',
     viewHex: 'د هیکس فریم کتل',
+    battery: 'د موبایل بیټرۍ',
+    charging: 'چارج کیږي',
   },
 };

@@ -2,6 +2,8 @@ import React from 'react';
 import { DriverProfile, Coordinates, LanguageCode, TripEventRecord } from '../types';
 import { UI_TEXT } from '../utils/i18n';
 import { validateFleetImei } from '../utils/imei';
+import { BatteryStatus } from '../utils/battery';
+import { BatteryIndicator } from './BatteryIndicator';
 import {
   User,
   Truck,
@@ -22,6 +24,7 @@ interface Props {
   onOpenLocationPicker: () => void;
   lang: LanguageCode;
   lastRecord: TripEventRecord | null;
+  battery?: BatteryStatus;
 }
 
 export const DriverStatusCard: React.FC<Props> = ({
@@ -32,6 +35,7 @@ export const DriverStatusCard: React.FC<Props> = ({
   onOpenLocationPicker,
   lang,
   lastRecord,
+  battery,
 }) => {
   const t = UI_TEXT[lang] || UI_TEXT.en;
 
@@ -55,13 +59,21 @@ export const DriverStatusCard: React.FC<Props> = ({
           </div>
 
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <span className="text-base sm:text-lg font-bold text-white truncate">
-                {profile.vehicleNumber || 'TLB-786'}
-              </span>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-orange-500/15 text-orange-400 border border-orange-500/30 flex-shrink-0">
-                Active Fleet
-              </span>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-base sm:text-lg font-bold text-white truncate">
+                  {profile.vehicleNumber || 'TLB-786'}
+                </span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-orange-500/15 text-orange-400 border border-orange-500/30 flex-shrink-0">
+                  Active Fleet
+                </span>
+              </div>
+              {/* Battery indicator on Driver header */}
+              {battery && (
+                <div className="sm:hidden flex-shrink-0">
+                  <BatteryIndicator battery={battery} compact />
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-2 text-xs text-slate-400 mt-0.5 truncate">
               <span className="flex items-center gap-1 font-medium text-slate-300">
@@ -130,36 +142,59 @@ export const DriverStatusCard: React.FC<Props> = ({
           </div>
         </div>
 
-        {/* Last Recorded Step Badge */}
-        <div className="md:col-span-3">
-          <div className="text-xs text-slate-400 font-medium mb-1 flex items-center justify-between">
-            <span>{t.lastRecorded}</span>
-            {lastRecord && (
-              <span className="text-[10px] text-orange-400 font-bold flex items-center gap-1">
-                <CheckCircle2 className="w-3 h-3" />
-                {lastRecord.formattedDateTime.split(' ')[1] || ''}
+        {/* Device Battery & Last Recorded Step Badge */}
+        <div className="md:col-span-3 flex flex-col gap-2.5">
+          {/* Battery Status Indicator Widget */}
+          {battery && (
+            <div className="hidden sm:flex items-center justify-between">
+              <span className="text-xs text-slate-400 font-medium">
+                {t.battery || 'Device Battery'}
               </span>
-            )}
-          </div>
-          {lastRecord ? (
-            <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-800 flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <div className="text-xs font-bold text-white truncate flex items-center gap-1.5">
-                  <span className="px-1.5 py-0.2 bg-orange-500/20 text-orange-400 text-[10px] rounded font-black">
-                    S{lastRecord.stepId}
-                  </span>
-                  <span className="truncate">{lastRecord.title}</span>
-                </div>
-                <div className="text-[10px] text-slate-400 mt-0.5">
-                  Speed: <span className="text-orange-400 font-bold">{lastRecord.speedCode} km/h</span> • {lastRecord.direction}
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="bg-slate-950/60 p-2 rounded-xl border border-dashed border-slate-800 text-center text-xs text-slate-500">
-              Trip ready to begin • Step 1
+              <BatteryIndicator
+                battery={battery}
+                langText={{ battery: t.battery, charging: t.charging }}
+                compact={false}
+              />
             </div>
           )}
+
+          <div>
+            <div className="text-xs text-slate-400 font-medium mb-1 flex items-center justify-between">
+              <span>{t.lastRecorded}</span>
+              {lastRecord && (
+                <span className="text-[10px] text-orange-400 font-bold flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3" />
+                  {lastRecord.formattedDateTime.split(' ')[1] || ''}
+                </span>
+              )}
+            </div>
+            {lastRecord ? (
+              <div className="bg-slate-950/80 p-2.5 rounded-xl border border-slate-800 flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="text-xs font-bold text-white truncate flex items-center gap-1.5">
+                    <span className="px-1.5 py-0.2 bg-orange-500/20 text-orange-400 text-[10px] rounded font-black">
+                      S{lastRecord.stepId}
+                    </span>
+                    <span className="truncate">{lastRecord.title}</span>
+                  </div>
+                  <div className="text-[10px] text-slate-400 mt-0.5 flex items-center justify-between gap-1">
+                    <span>
+                      Speed: <span className="text-orange-400 font-bold">{lastRecord.speedCode} km/h</span> • {lastRecord.direction}
+                    </span>
+                    {lastRecord.batteryLevel !== undefined && (
+                      <span className="font-mono text-emerald-400 text-[9px]">
+                        ⚡{lastRecord.batteryLevel}%
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-slate-950/60 p-2 rounded-xl border border-dashed border-slate-800 text-center text-xs text-slate-500">
+                Trip ready to begin • Step 1
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

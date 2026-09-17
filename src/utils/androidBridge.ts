@@ -298,3 +298,35 @@ export async function transmitGt06Packet(params: {
     note: `Recorded offline on device. Verified GT06 frame staged for automatic sync.`,
   };
 }
+
+/**
+ * Read device battery level from Android native bridge
+ */
+export function getAndroidBatteryPercentage(): number | null {
+  if (typeof (window as any).AndroidBridge?.getBatteryPercentage === 'function') {
+    try {
+      const level = (window as any).AndroidBridge.getBatteryPercentage();
+      if (typeof level === 'number' && !isNaN(level) && level >= 0 && level <= 100) {
+        return Math.round(level);
+      }
+    } catch (e) {
+      console.warn('Native getBatteryPercentage error:', e);
+    }
+  }
+  return null;
+}
+
+/**
+ * Check if device is charging from Android native bridge
+ */
+export function isAndroidBatteryCharging(): boolean {
+  if (typeof (window as any).AndroidBridge?.isBatteryCharging === 'function') {
+    try {
+      return Boolean((window as any).AndroidBridge.isBatteryCharging());
+    } catch (e) {
+      return false;
+    }
+  }
+  return false;
+}
+

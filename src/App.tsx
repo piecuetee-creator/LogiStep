@@ -41,6 +41,7 @@ import {
   showAndroidToast,
   isNativeAndroidApp,
 } from './utils/androidBridge';
+import { getBatteryStatus, subscribeBatteryStatus, BatteryStatus } from './utils/battery';
 import { AndroidNavBar } from './components/AndroidNavBar';
 import { AndroidToast } from './components/AndroidToast';
 import {
@@ -206,6 +207,21 @@ export default function App() {
   const [isLocationPickerOpen, setIsLocationPickerOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isTestingSocket, setIsTestingSocket] = useState(false);
+
+  // State: Device Battery Status (Hardware Telematics)
+  const [battery, setBattery] = useState<BatteryStatus>({
+    level: 88,
+    isCharging: false,
+    source: 'FALLBACK',
+  });
+
+  // Real-time battery status listener (Native Android Bridge + Web Battery API)
+  useEffect(() => {
+    const unsubscribe = subscribeBatteryStatus((status) => {
+      setBattery(status);
+    });
+    return () => unsubscribe();
+  }, []);
 
   // Persistence helpers
   const handleDirectionChange = (newDir: TripDirection) => {
@@ -576,6 +592,8 @@ export default function App() {
         imei: profile.imei,
         driverName: profile.driverName,
         vehicleNumber: profile.vehicleNumber,
+        batteryLevel: battery.level,
+        isCharging: battery.isCharging,
         txHex: data.txLocationHex,
         rxHex: data.rxHex,
         status: 'SUCCESS',
@@ -691,6 +709,8 @@ export default function App() {
         imei: profile.imei,
         driverName: profile.driverName,
         vehicleNumber: profile.vehicleNumber,
+        batteryLevel: battery.level,
+        isCharging: battery.isCharging,
         txHex: data.txLocationHex,
         rxHex: data.rxHex,
         status: 'SUCCESS',
@@ -788,6 +808,7 @@ export default function App() {
         onOpenLogs={() => setIsLogsOpen(true)}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onLogout={handleLogout}
+        battery={battery}
       />
 
       {/* Main Container */}
@@ -849,6 +870,7 @@ export default function App() {
           onOpenLocationPicker={() => setIsLocationPickerOpen(true)}
           lang={lang}
           lastRecord={latestRecord}
+          battery={battery}
         />
 
         {/* Offline Store-and-Forward Telematics Buffer Strip */}

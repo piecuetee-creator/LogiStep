@@ -223,6 +223,20 @@ export const StepConfirmDialog: React.FC<Props> = ({
                   {activeResultRecord.speedCode} km/h
                 </span>
               </div>
+              {activeResultRecord.batteryLevel !== undefined && (
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Device Battery:</span>
+                  <span className="font-mono font-bold text-emerald-400 flex items-center gap-1">
+                    <span>🔋</span>
+                    <span>{activeResultRecord.batteryLevel}%</span>
+                    {activeResultRecord.isCharging && (
+                      <span className="text-[10px] text-emerald-300 font-sans px-1 rounded bg-emerald-950/80 border border-emerald-500/30">
+                        Charging
+                      </span>
+                    )}
+                  </span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-slate-400">Coordinates:</span>
                 <span className="font-mono text-slate-300">

@@ -1,6 +1,8 @@
 import React from 'react';
 import { TripDirection, LanguageCode, ConnectionStatus } from '../types';
 import { UI_TEXT } from '../utils/i18n';
+import { BatteryStatus } from '../utils/battery';
+import { BatteryIndicator } from './BatteryIndicator';
 import {
   ArrowUpRight,
   ArrowDownLeft,
@@ -23,6 +25,7 @@ interface Props {
   onOpenLogs: () => void;
   onOpenSettings: () => void;
   onLogout?: () => void;
+  battery?: BatteryStatus;
 }
 
 export const LogiStepHeader: React.FC<Props> = ({
@@ -36,6 +39,7 @@ export const LogiStepHeader: React.FC<Props> = ({
   onOpenLogs,
   onOpenSettings,
   onLogout,
+  battery,
 }) => {
   const t = UI_TEXT[lang] || UI_TEXT.en;
   const isRtl = lang === 'ur' || lang === 'ps';
@@ -80,6 +84,13 @@ export const LogiStepHeader: React.FC<Props> = ({
 
           {/* Right utility actions: Language Toggle + Modals */}
           <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* Battery Indicator in Header (Real-time hardware status) */}
+            {battery && (
+              <div className="flex items-center">
+                <BatteryIndicator battery={battery} compact />
+              </div>
+            )}
+
             {/* Language Switcher */}
             <div className="flex items-center bg-slate-800/90 p-1 rounded-xl border border-slate-700/60 text-xs font-semibold">
               <button

@@ -47,7 +47,9 @@ export const TripHistoryModal: React.FC<Props> = ({
       `---------------------------------`,
       ...records.map(
         (r) =>
-          `✅ *Step ${r.stepId}*: ${r.title}\n   🕒 ${r.formattedDateTime} | ⚡ ${r.speedCode} km/h | 🧭 ${r.direction} (Ignition:${r.ignition})\n   📍 ${r.locationName}`
+          `✅ *Step ${r.stepId}*: ${r.title}\n   🕒 ${r.formattedDateTime} | ⚡ ${r.speedCode} km/h | 🧭 ${r.direction} (Ignition:${r.ignition})${
+            r.batteryLevel !== undefined ? ` | 🔋 ${r.batteryLevel}%` : ''
+          }\n   📍 ${r.locationName}`
       ),
       `---------------------------------`,
       `Generated via LogiStep VTP AVL Gateway`,
@@ -203,6 +205,12 @@ export const TripHistoryModal: React.FC<Props> = ({
                         </div>
 
                         <div className="flex items-center gap-3 sm:justify-end font-mono">
+                          {rec.batteryLevel !== undefined && (
+                            <span className="text-emerald-400 font-bold text-[11px] flex items-center gap-0.5">
+                              <span>🔋</span>
+                              <span>{rec.batteryLevel}%</span>
+                            </span>
+                          )}
                           <span className="text-orange-400 font-bold">
                             Speed: {rec.speedCode} km/h
                           </span>

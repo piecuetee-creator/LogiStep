@@ -22,6 +22,9 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.DialogInterface;
 import android.content.pm.ActivityInfo;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.os.BatteryManager;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.HashMap;
@@ -198,6 +201,45 @@ public class MainActivity extends Activity {
                     android.widget.Toast.makeText(MainActivity.this, msg, android.widget.Toast.LENGTH_SHORT).show();
                 }
             });
+        }
+
+        @android.webkit.JavascriptInterface
+        public int getBatteryPercentage() {
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    BatteryManager bm = (BatteryManager) getSystemService(BATTERY_SERVICE);
+                    if (bm != null) {
+                        int level = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY);
+                        if (level >= 0 && level <= 100) {
+                            return level;
+                        }
+                    }
+                }
+                IntentFilter ifilter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
+                Intent batteryStatus = registerReceiver(null, ifilter);
+                if (batteryStatus != null) {
+                    int level = batteryStatus.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
+                    int scale = batteryStatus.getIntExtra(BatteryManager.EXTRA_SCALE, -1);
+                    if (level >= 0 && scale > 0) {
+                        return (int) Math.round((level / (float) scale) * 100.0f);
+                    }
+                }
+            } catch (Exception ignored) {}
+            return 85;
+        }
+
+        @android.webkit.JavascriptInterface
+        public boolean isBatteryCharging() {
+            try {
+                IntentFilter ifilter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
+                Intent batteryStatus = registerReceiver(null, ifilter);
+                if (batteryStatus != null) {
+                    int status = batteryStatus.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
+                    return status == BatteryManager.BATTERY_STATUS_CHARGING ||
+                           status == BatteryManager.BATTERY_STATUS_FULL;
+                }
+            } catch (Exception ignored) {}
+            return false;
         }
 
         @android.webkit.JavascriptInterface

@@ -1,26 +1,31 @@
 /**
  * Fleet App IMEI Pattern & Criteria Utility
  * 
+ * Fleet App ID Concept:
+ * - App ID 99002: Presence (Attendance) App
+ * - App ID 99003: LogiStep (Fleet Progression & Telematics) App
+ * 
  * Fleet Criteria Formula:
- * 99002 + Company Code (4 digits) + Employee Code (4 digits) + Server (2 digits)
+ * 99003 + Company Code (4 digits) + Employee Code (4 digits) + Server (2 digits)
  * Total: Exactly 15 numeric digits (GT06 standard telematics IMEI)
  * 
  * Breakdown:
- * 1. Prefix: '99002' (5 digits) - Virtual telematics series ID
+ * 1. App ID Prefix: '99003' (5 digits) - LogiStep Fleet Telematics Series
  * 2. Company Code: 4 digits (e.g. '1001')
  * 3. Employee Code: 4 digits (e.g. '0452')
- * 4. Server Code: 2 digits (e.g. '03')
+ * 4. Server Code: 2 digits (e.g. '01')
  * 
  * Example:
- * 99002 + 1001 + 0452 + 03 = 990021001045203 (15 digits)
- * GT06 BCD: 09 90 02 10 01 04 52 03 (8 bytes)
+ * 99003 + 1001 + 0452 + 01 = 990031001045201 (15 digits)
+ * GT06 BCD: 09 90 03 10 01 04 52 01 (8 bytes)
  */
 
 export interface ImeiCriteriaCheck {
   isValid: boolean;
   is15Digits: boolean;
   has99Prefix: boolean;
-  has99002Series: boolean;
+  hasAppIdSeries: boolean;
+  appId: '99003' | '99002' | string;
   hasDigitsOnly: boolean;
   series: string;
   companyCode: string;
@@ -33,7 +38,7 @@ export interface ImeiCriteriaCheck {
 
 /**
  * Builds a 15-digit IMEI according to the Fleet criteria pattern:
- * 99002 + Company Code (4D) + Employee Code (4D) + Server (2D)
+ * 99003 + Company Code (4D) + Employee Code (4D) + Server (2D)
  */
 export function buildFleetImei(params: {
   companyCode?: string;
@@ -41,7 +46,7 @@ export function buildFleetImei(params: {
   serverDigits?: string;
   prefix?: string;
 }): string {
-  const prefix = (params.prefix || '99002').replace(/\D/g, '').slice(0, 5) || '99002';
+  const prefix = (params.prefix || '99003').replace(/\D/g, '').slice(0, 5) || '99003';
   
   // Format company code (4 digits, e.g. '1001')
   const rawCompany = (params.companyCode || '1001').replace(/\D/g, '');
@@ -51,9 +56,9 @@ export function buildFleetImei(params: {
   const rawEmployee = (params.employeeCode || '0452').replace(/\D/g, '');
   const employeeCode = rawEmployee ? rawEmployee.padStart(4, '0').slice(-4) : '0452';
 
-  // Format server digits (2 digits, e.g. '03')
-  const rawServer = (params.serverDigits || '03').replace(/\D/g, '');
-  const serverCode = rawServer ? rawServer.padStart(2, '0').slice(-2) : '03';
+  // Format server digits (2 digits, default: '01')
+  const rawServer = (params.serverDigits || '01').replace(/\D/g, '');
+  const serverCode = rawServer ? rawServer.padStart(2, '0').slice(-2) : '01';
 
   // Combine: 5 + 4 + 4 + 2 = 15 digits
   return `${prefix}${companyCode}${employeeCode}${serverCode}`;
@@ -61,7 +66,7 @@ export function buildFleetImei(params: {
 
 /**
  * Validates any IMEI string against the Fleet criteria pattern:
- * 99002 + Company Code (4D) + Employee Code (4D) + Server (2D)
+ * 99003 (LogiStep) or 99002 (Presence) + Company Code (4D) + Employee Code (4D) + Server (2D)
  */
 export function validateFleetImei(imei: string): ImeiCriteriaCheck {
   const clean = (imei || '').trim();
@@ -70,7 +75,9 @@ export function validateFleetImei(imei: string): ImeiCriteriaCheck {
   const hasDigitsOnly = /^\d+$/.test(clean);
   const is15Digits = clean.length === 15 && digitsOnly.length === 15;
   const has99Prefix = clean.startsWith('99');
-  const has99002Series = clean.startsWith('99002');
+  const isLogiStep = clean.startsWith('99003');
+  const isPresence = clean.startsWith('99002');
+  const hasAppIdSeries = isLogiStep || isPresence;
 
   const series = clean.slice(0, 5);
   const companyCode = clean.length >= 9 ? clean.slice(5, 9) : clean.slice(5);
@@ -101,27 +108,26 @@ export function validateFleetImei(imei: string): ImeiCriteriaCheck {
   } else if (clean.length !== 15) {
     isValid = false;
     message = `IMEI must be exactly 15 digits (currently ${clean.length})`;
-  } else if (!has99002Series) {
-    if (clean.startsWith('99003')) {
-      isValid = false;
-      message = 'Using obsolete 99003! Update to 99002 series pattern.';
-    } else if (clean.startsWith('99')) {
-      isValid = true;
-      message = `15-digit GT06 compliant (Series: ${series})`;
-    } else {
-      isValid = false;
-      message = "IMEI must begin with '99002' series";
-    }
-  } else {
+  } else if (isLogiStep) {
     isValid = true;
-    message = 'Fleet Criteria Met: 99002 + Company (4D) + Employee (4D) + Server (2D)';
+    message = 'LogiStep App ID (99003) • 15 Digits GT06 Valid';
+  } else if (isPresence) {
+    isValid = true;
+    message = 'Presence App ID (99002) • 15 Digits GT06 Valid';
+  } else if (has99Prefix) {
+    isValid = true;
+    message = `15-digit GT06 compliant (Series: ${series})`;
+  } else {
+    isValid = false;
+    message = "IMEI must begin with '99003' series for LogiStep";
   }
 
   return {
     isValid,
     is15Digits,
     has99Prefix,
-    has99002Series,
+    hasAppIdSeries,
+    appId: isLogiStep ? '99003' : isPresence ? '99002' : series,
     hasDigitsOnly,
     series,
     companyCode,

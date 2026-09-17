@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { StepDefinition, LanguageCode, TripEventRecord } from '../types';
 import { TRIP_STEPS } from '../data/stepsData';
 import {
@@ -14,6 +14,8 @@ import {
   Flag,
   ArrowRight,
   Sparkles,
+  RotateCcw,
+  ChevronRight,
 } from 'lucide-react';
 
 interface Props {
@@ -44,39 +46,157 @@ export const TripActionButtons: React.FC<Props> = ({
   isProcessing,
   processingStepId,
 }) => {
-  // Find highest step marked so far
-  const markedStepIds = new Set(tripRecords.map((r) => r.stepId));
-  const latestStepId = tripRecords.length > 0 ? tripRecords[tripRecords.length - 1].stepId : 0;
-  const nextRecommendedStepId = latestStepId < 10 ? latestStepId + 1 : 10;
+  // Only consider Journey step records (stepId 1 to 10)
+  const journeyRecords = tripRecords.filter((r) => r.stepId >= 1 && r.stepId <= 10);
+  const markedStepIds = new Set(journeyRecords.map((r) => r.stepId));
+
+  // Determine latest journey step completed
+  const latestRecord = journeyRecords.length > 0 ? journeyRecords[journeyRecords.length - 1] : null;
+  const latestStepId = latestRecord ? latestRecord.stepId : 0;
+
+  // Next recommended step (if 10 completed, loops back to step 1 for new trip!)
+  const nextRecommendedStepId = latestStepId === 10 ? 1 : latestStepId < 10 ? latestStepId + 1 : 1;
+
+  // Next active step object
+  const activeStep = useMemo(() => {
+    return TRIP_STEPS.find((s) => s.id === nextRecommendedStepId) || TRIP_STEPS[0];
+  }, [nextRecommendedStepId]);
+
+  // Dynamic Rotating Loop Order (as requested in the audio note):
+  // The upcoming/pending steps come FIRST (with activeStep at position 0).
+  // Once a step is tapped, it rotates to the bottom of the list with a completed tag!
+  const orderedSteps = useMemo(() => {
+    const upcoming: StepDefinition[] = [];
+    const completed: StepDefinition[] = [];
+
+    // If trip completed (all 10 done), all are in completed, or starting fresh loop
+    TRIP_STEPS.forEach((step) => {
+      if (step.id === nextRecommendedStepId) {
+        upcoming.push(step);
+      } else if (step.id > nextRecommendedStepId) {
+        upcoming.push(step);
+      } else {
+        completed.push(step);
+      }
+    });
+
+    // Upcoming first (activeStep at top), completed rotated to the bottom
+    return [...upcoming, ...completed];
+  }, [nextRecommendedStepId]);
+
+  const ActiveIcon = STEP_ICONS[activeStep.iconName] || Truck;
+
+  // Active step texts
+  let activeTitle = activeStep.titleEn;
+  let activeSecTitle = activeStep.titleUr;
+  let activeSub = activeStep.subtitleEn;
+
+  if (lang === 'ur') {
+    activeTitle = activeStep.titleUr;
+    activeSecTitle = activeStep.titleEn;
+    activeSub = activeStep.subtitleUr;
+  } else if (lang === 'ps') {
+    activeTitle = activeStep.titlePs;
+    activeSecTitle = activeStep.titleEn;
+    activeSub = activeStep.subtitlePs;
+  }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
+          <span className="w-2.5 h-2.5 rounded-full bg-orange-500 animate-pulse" />
           <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
-            <span>10-Step Fleet Progression Journey</span>
+            <span>
+              {lang === 'ur'
+                ? 'سفری سرگرمیاں (10 مرحلہ وار سفر)'
+                : lang === 'ps'
+                ? 'د سفر ۱۰ پړاوونه'
+                : '10-Step Fleet Journey'}
+            </span>
           </h2>
         </div>
-        <div className="text-xs text-slate-400 font-medium hidden sm:block">
-          Speed column hijacked for GT06 telematics (101 - 110 km/h)
+        <div className="text-xs text-slate-400 font-medium hidden sm:block font-mono">
+          Auto-Rotating Pipeline • Loop Mode
         </div>
       </div>
 
-      {/* Grid of 10 Action Buttons */}
+      {/* HERO / PRIMARY 1-TAP CARD: "Always tap the first button!" */}
+      <div className="relative p-0.5 rounded-3xl bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 shadow-xl shadow-orange-950/40">
+        <button
+          type="button"
+          onClick={() => onSelectStep(activeStep)}
+          disabled={isProcessing}
+          className="w-full text-left p-4 sm:p-5 rounded-[22px] bg-[#0c1424] hover:bg-[#101b30] transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-pointer active:scale-[0.99] disabled:opacity-75"
+        >
+          <div className="flex items-start sm:items-center gap-3.5">
+            {/* Pulsing Icon Badge */}
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-orange-500/30 to-amber-500/20 border border-orange-500/50 flex items-center justify-center text-orange-400 flex-shrink-0 shadow-lg shadow-orange-950/50 animate-pulse">
+              <ActiveIcon className="w-7 h-7" />
+            </div>
+
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="px-2.5 py-0.5 rounded-md bg-orange-500 text-slate-950 font-black text-xs uppercase tracking-wider shadow-sm">
+                  {lang === 'ur' ? `مرحلہ ${activeStep.id}` : `STEP ${activeStep.id}`}
+                </span>
+                <span className="text-[11px] font-mono font-bold text-orange-300 border border-orange-500/30 px-2 py-0.5 rounded-md bg-orange-500/10">
+                  SPEED: {activeStep.speedCode} km/h
+                </span>
+                <span className="text-[10px] uppercase font-bold text-amber-400 animate-bounce hidden sm:inline">
+                  ★ {lang === 'ur' ? 'اگلا مرحلہ' : 'NEXT ACTION'}
+                </span>
+              </div>
+
+              <h3 className="text-lg sm:text-xl font-black text-white leading-tight">
+                {activeTitle}
+              </h3>
+              <div className="text-xs sm:text-sm font-semibold text-slate-300 mt-0.5">
+                {activeSecTitle}
+              </div>
+              <p className="text-xs text-slate-400 mt-1 line-clamp-1 max-w-xl">
+                {activeSub}
+              </p>
+            </div>
+          </div>
+
+          {/* Large Action CTA Pill */}
+          <div className="flex items-center gap-2 sm:self-center self-end">
+            <div className="px-4 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-400 text-slate-950 font-black text-xs uppercase tracking-wider flex items-center gap-1.5 shadow-md">
+              <span>{lang === 'ur' ? 'ابھی دبائیں' : 'TAP TO LOG'}</span>
+              <ArrowRight className="w-4 h-4" />
+            </div>
+          </div>
+        </button>
+      </div>
+
+      <div className="flex items-center justify-between text-xs text-slate-400 px-1 pt-1">
+        <span>
+          {lang === 'ur'
+            ? 'مرحلہ مکمل ہونے پر بٹن خودکار طور پر نیچے چلا جائے گا اور اگلا بٹن اوپر آ جائے گا'
+            : 'Completed steps automatically rotate to the bottom, promoting the next action to the top'}
+        </span>
+        {latestStepId > 0 && (
+          <span className="text-orange-400 font-medium">
+            {markedStepIds.size} / 10 {lang === 'ur' ? 'مکمل' : 'Done'}
+          </span>
+        )}
+      </div>
+
+      {/* Rotating Pipeline List of Steps */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-3 sm:gap-3.5">
-        {TRIP_STEPS.map((step) => {
+        {orderedSteps.map((step) => {
           const isMarked = markedStepIds.has(step.id);
-          const isNext = step.id === nextRecommendedStepId && !isMarked;
+          const isCurrentTop = step.id === activeStep.id;
           const isCurrentlyProcessing = isProcessing && processingStepId === step.id;
-          const lastRecordForThisStep = tripRecords
+          const lastRecordForThisStep = journeyRecords
             .slice()
             .reverse()
             .find((r) => r.stepId === step.id);
 
           const IconComponent = STEP_ICONS[step.iconName] || Truck;
 
-          // Multilingual strings
           let primaryTitle = step.titleEn;
           let secondaryTitle = step.titleUr;
           let subtitle = step.subtitleEn;
@@ -91,166 +211,95 @@ export const TripActionButtons: React.FC<Props> = ({
             subtitle = step.subtitlePs;
           }
 
-          // Step specific color themes
-          const colorStyles: Record<
-            number,
-            {
-              border: string;
-              activeBg: string;
-              numBadge: string;
-              speedBadge: string;
-              accentText: string;
-            }
-          > = {
-            1: {
-              border: 'border-orange-500/40 hover:border-orange-400',
-              activeBg: 'from-orange-950/50 via-slate-900/90 to-slate-900',
-              numBadge: 'bg-orange-500 text-slate-950 font-black',
-              speedBadge: 'bg-orange-500/15 text-orange-300 border-orange-500/30',
-              accentText: 'text-orange-400',
-            },
-            2: {
-              border: 'border-teal-500/40 hover:border-teal-400',
-              activeBg: 'from-teal-950/50 via-slate-900/90 to-slate-900',
-              numBadge: 'bg-teal-500 text-slate-950',
-              speedBadge: 'bg-teal-500/15 text-teal-300 border-teal-500/30',
-              accentText: 'text-teal-400',
-            },
-            3: {
-              border: 'border-cyan-500/40 hover:border-cyan-400',
-              activeBg: 'from-cyan-950/50 via-slate-900/90 to-slate-900',
-              numBadge: 'bg-cyan-500 text-slate-950',
-              speedBadge: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30',
-              accentText: 'text-cyan-400',
-            },
-            4: {
-              border: 'border-amber-500/40 hover:border-amber-400',
-              activeBg: 'from-amber-950/50 via-slate-900/90 to-slate-900',
-              numBadge: 'bg-amber-500 text-slate-950',
-              speedBadge: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
-              accentText: 'text-amber-400',
-            },
-            5: {
-              border: 'border-blue-500/40 hover:border-blue-400',
-              activeBg: 'from-blue-950/50 via-slate-900/90 to-slate-900',
-              numBadge: 'bg-blue-500 text-slate-950',
-              speedBadge: 'bg-blue-500/15 text-blue-300 border-blue-500/30',
-              accentText: 'text-blue-400',
-            },
-            6: {
-              border: 'border-purple-500/40 hover:border-purple-400',
-              activeBg: 'from-purple-950/50 via-slate-900/90 to-slate-900',
-              numBadge: 'bg-purple-500 text-slate-950',
-              speedBadge: 'bg-purple-500/15 text-purple-300 border-purple-500/30',
-              accentText: 'text-purple-400',
-            },
-            7: {
-              border: 'border-indigo-500/40 hover:border-indigo-400',
-              activeBg: 'from-indigo-950/50 via-slate-900/90 to-slate-900',
-              numBadge: 'bg-indigo-500 text-slate-950',
-              speedBadge: 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30',
-              accentText: 'text-indigo-400',
-            },
-            8: {
-              border: 'border-rose-500/40 hover:border-rose-400',
-              activeBg: 'from-rose-950/50 via-slate-900/90 to-slate-900',
-              numBadge: 'bg-rose-500 text-slate-950',
-              speedBadge: 'bg-rose-500/15 text-rose-300 border-rose-500/30',
-              accentText: 'text-rose-400',
-            },
-            9: {
-              border: 'border-orange-500/40 hover:border-orange-400',
-              activeBg: 'from-orange-950/50 via-slate-900/90 to-slate-900',
-              numBadge: 'bg-orange-500 text-slate-950',
-              speedBadge: 'bg-orange-500/15 text-orange-300 border-orange-500/30',
-              accentText: 'text-orange-400',
-            },
-            10: {
-              border: 'border-orange-400 hover:border-orange-300',
-              activeBg: 'from-orange-950/70 via-slate-900/90 to-slate-900',
-              numBadge: 'bg-orange-400 text-slate-950 font-black',
-              speedBadge: 'bg-orange-400/20 text-orange-300 border-orange-400/40',
-              accentText: 'text-orange-400',
-            },
-          };
-
-          const style = colorStyles[step.id];
-
           return (
             <button
               key={step.id}
               type="button"
               onClick={() => onSelectStep(step)}
               disabled={isProcessing}
-              className={`group relative text-left p-4 sm:p-4.5 rounded-2xl border transition-all duration-200 overflow-hidden flex flex-col justify-between min-h-[135px] active:scale-[0.985] ${
-                style.border
-              } bg-gradient-to-br ${style.activeBg} ${
-                isMarked
-                  ? 'ring-2 ring-orange-500/40 shadow-lg shadow-orange-950/30'
-                  : isNext
-                  ? 'ring-2 ring-amber-400/60 shadow-xl shadow-amber-950/40 animate-pulse'
-                  : 'hover:shadow-lg'
-              } disabled:opacity-60`}
+              className={`group relative text-left p-4 rounded-2xl border transition-all duration-200 overflow-hidden flex flex-col justify-between min-h-[130px] active:scale-[0.985] cursor-pointer ${
+                isCurrentTop
+                  ? 'border-orange-500/80 bg-gradient-to-br from-orange-950/40 via-slate-900/90 to-slate-900 ring-2 ring-orange-500/40 shadow-lg shadow-orange-950/40'
+                  : isMarked
+                  ? 'border-slate-800/80 bg-slate-950/70 opacity-80 hover:opacity-100 hover:border-slate-700'
+                  : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'
+              }`}
             >
               {/* Top Row: Step Tag + Speed Code + Icon */}
               <div className="flex items-center justify-between gap-2 w-full">
                 <div className="flex items-center gap-2">
                   <span
-                    className={`px-2 py-0.5 rounded-md font-black text-xs tracking-wider uppercase shadow-sm ${style.numBadge}`}
+                    className={`px-2 py-0.5 rounded-md font-black text-xs tracking-wider uppercase ${
+                      isCurrentTop
+                        ? 'bg-orange-500 text-slate-950'
+                        : isMarked
+                        ? 'bg-slate-800 text-slate-400'
+                        : 'bg-slate-800 text-slate-200'
+                    }`}
                   >
                     STEP {step.id}
                   </span>
 
-                  <span
-                    className={`px-2 py-0.5 rounded-md text-[11px] font-bold border font-mono ${style.speedBadge}`}
-                  >
-                    SPEED: {step.speedCode} km/h
+                  <span className="px-2 py-0.5 rounded-md text-[11px] font-bold border border-slate-700/60 font-mono text-slate-300 bg-slate-900/80">
+                    {step.speedCode} km/h
                   </span>
 
                   {isMarked && (
-                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-orange-500/20 text-orange-400 border border-orange-500/30">
-                      <CheckCircle2 className="w-3 h-3" />
-                      Marked
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                      <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                      {lang === 'ur' ? 'مکمل' : 'Logged'}
+                    </span>
+                  )}
+
+                  {isCurrentTop && (
+                    <span className="px-1.5 py-0.5 rounded-md text-[10px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                      NEXT
                     </span>
                   )}
                 </div>
 
                 <div
-                  className={`p-2 rounded-xl bg-slate-900/90 border border-slate-800 ${style.accentText} group-hover:scale-110 transition-transform`}
+                  className={`p-2 rounded-xl bg-slate-900 border border-slate-800 transition-transform ${
+                    isCurrentTop ? 'text-orange-400 group-hover:scale-110' : 'text-slate-400'
+                  }`}
                 >
-                  <IconComponent className="w-5 h-5" />
+                  <IconComponent className="w-4 h-4" />
                 </div>
               </div>
 
-              {/* Middle: Primary Title & Bilingual Subtitle */}
+              {/* Middle: Titles */}
               <div className="my-2">
-                <h3 className="text-base sm:text-lg font-extrabold text-white leading-snug group-hover:text-amber-200 transition-colors">
+                <h3
+                  className={`text-base font-extrabold leading-snug transition-colors ${
+                    isCurrentTop ? 'text-white' : isMarked ? 'text-slate-300' : 'text-slate-100'
+                  }`}
+                >
                   {primaryTitle}
                 </h3>
-                <div className="text-xs sm:text-sm font-semibold text-slate-300/90 mt-0.5">
+                <div className="text-xs font-semibold text-slate-400 mt-0.5">
                   {secondaryTitle}
                 </div>
-                <p className="text-[11px] text-slate-400 mt-1 line-clamp-2 leading-relaxed">
+                <p className="text-[11px] text-slate-500 mt-1 line-clamp-2 leading-relaxed">
                   {subtitle}
                 </p>
               </div>
 
-              {/* Bottom: Action Status Strip */}
+              {/* Bottom Strip */}
               <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between text-xs">
                 {lastRecordForThisStep ? (
-                  <span className="text-[11px] text-orange-400 font-medium flex items-center gap-1">
+                  <span className="text-[11px] text-emerald-400 font-medium flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3" />
                     <span>Logged at {lastRecordForThisStep.formattedDateTime.split(' ')[1]}</span>
-                    <span>({lastRecordForThisStep.direction})</span>
                   </span>
                 ) : (
                   <span className="text-[11px] text-slate-500 group-hover:text-slate-300 transition-colors flex items-center gap-1">
-                    <span>Tap to log & transmit</span>
-                    <ArrowRight className="w-3 h-3 group-hover:translate-x-1 transition-transform" />
+                    <span>Tap to log</span>
+                    <ChevronRight className="w-3 h-3" />
                   </span>
                 )}
 
                 {isCurrentlyProcessing && (
-                  <span className="text-[11px] text-amber-400 font-bold animate-pulse">
+                  <span className="text-[11px] text-orange-400 font-bold animate-pulse">
                     Transmitting...
                   </span>
                 )}

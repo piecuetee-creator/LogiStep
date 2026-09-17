@@ -81,7 +81,7 @@ export const DriverStatusCard: React.FC<Props> = ({
                 <span>Locked</span>
               </span>
               <span className="text-[9px] font-sans px-1.5 py-0.5 rounded bg-orange-500/10 text-orange-300 border border-orange-500/20 font-semibold">
-                Fleet 99002
+                LogiStep 99003
               </span>
             </div>
           </div>

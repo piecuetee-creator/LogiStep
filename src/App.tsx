@@ -11,10 +11,11 @@ import {
   TripEventRecord,
   LocationPreset,
 } from './types';
-import { TRIP_STEPS, PAKISTAN_LOCATIONS } from './data/stepsData';
+import { TRIP_STEPS, DUTY_ACTIVITIES, PAKISTAN_LOCATIONS } from './data/stepsData';
 import { LogiStepHeader } from './components/LogiStepHeader';
 import { DriverStatusCard } from './components/DriverStatusCard';
 import { TripActionButtons } from './components/TripActionButtons';
+import { DutyActionButtons } from './components/DutyActionButtons';
 import { StepConfirmDialog } from './components/StepConfirmDialog';
 import { TripHistoryModal } from './components/TripHistoryModal';
 import { SocketLogsModal } from './components/SocketLogsModal';
@@ -27,6 +28,14 @@ import { buildLoginPacket, buildLocationPacket, bytesToHex } from './utils/gt06'
 import { buildFleetImei } from './utils/imei';
 import { transmitOverWebSocket } from './utils/websocket';
 import {
+  enqueuePacket,
+  getPendingPackets,
+  getPendingCount,
+  markPacketSynced,
+  markPacketFailed,
+  syncAllPendingPackets,
+} from './utils/offlineQueue';
+import {
   transmitGt06Packet,
   triggerHapticFeedback,
   showAndroidToast,
@@ -34,7 +43,20 @@ import {
 } from './utils/androidBridge';
 import { AndroidNavBar } from './components/AndroidNavBar';
 import { AndroidToast } from './components/AndroidToast';
-import { ArrowUpRight, ArrowDownLeft, Shield, Radio, CheckCircle2 } from 'lucide-react';
+import {
+  ArrowUpRight,
+  ArrowDownLeft,
+  Shield,
+  Radio,
+  CheckCircle2,
+  CloudUpload,
+  RefreshCw,
+  Clock,
+  Compass,
+  Briefcase,
+  Layers,
+} from 'lucide-react';
+import { DutyActivityDefinition } from './types';
 
 const DEFAULT_PROFILE: DriverProfile = {
   driverName: 'Khan Muhammad',
@@ -45,14 +67,14 @@ const DEFAULT_PROFILE: DriverProfile = {
   companyCode: '1001',
   employeeCode: '0452',
   serverDigits: '01',
-  imei: '990021001045201', // 99002 (5D) + company code (4D: 1001) + employee code (4D: 0452) + server (2D: 01)
+  imei: '990031001045201', // LogiStep App ID: 99003 (5D) + company code (4D: 1001) + employee code (4D: 0452) + server (2D: 01)
 };
 
 const DEFAULT_SOCKET_CONFIG: SocketConfig = {
   tcpHost: 'avl.vtps.org',
   tcpPort: 5200,
   wsUrl: 'ws://avl.vtps.org:5200',
-  imei: '990021001045201',
+  imei: '990031001045201',
   useWebSocket: true,
   timeoutMs: 3500,
 };
@@ -93,9 +115,9 @@ export default function App() {
         if (!parsed.companyCode || parsed.companyCode.length !== 4) parsed.companyCode = '1001';
         if (!parsed.employeeCode || parsed.employeeCode.length !== 4) parsed.employeeCode = '0452';
         if (!parsed.serverDigits || parsed.serverDigits.length !== 2) parsed.serverDigits = '01';
-        // Always enforce locked IMEI matching 99002 + companyCode + employeeCode + serverDigits
+        // Always enforce locked IMEI matching 99003 (LogiStep App ID) + companyCode + employeeCode + serverDigits
         parsed.imei = buildFleetImei({
-          prefix: '99002',
+          prefix: '99003',
           companyCode: parsed.companyCode,
           employeeCode: parsed.employeeCode,
           serverDigits: parsed.serverDigits,
@@ -117,7 +139,7 @@ export default function App() {
         if (profileSaved) {
           const parsedProf = JSON.parse(profileSaved);
           parsed.imei = buildFleetImei({
-            prefix: '99002',
+            prefix: '99003',
             companyCode: parsedProf.companyCode || '1001',
             employeeCode: parsedProf.employeeCode || '0452',
             serverDigits: parsedProf.serverDigits || '01',
@@ -130,6 +152,17 @@ export default function App() {
     }
     return DEFAULT_SOCKET_CONFIG;
   });
+
+  // Dual Activity Tabs: 'journey' (10-Step Fleet Progression) vs 'duty' (Everyday Routine Activities)
+  const [activityTab, setActivityTab] = useState<'journey' | 'duty'>('journey');
+
+  // Offline Store-and-Forward Telematics Queue state
+  const [pendingCount, setPendingCount] = useState<number>(() => getPendingCount());
+  const [isSyncingQueue, setIsSyncingQueue] = useState(false);
+
+  // Active Duty Action state (for confirmation / logging)
+  const [activeConfirmDuty, setActiveConfirmDuty] = useState<DutyActivityDefinition | null>(null);
+  const [processingDutyId, setProcessingDutyId] = useState<number | null>(null);
 
   // State: Coordinates
   const [coords, setCoords] = useState<Coordinates>(() => {
@@ -302,9 +335,9 @@ export default function App() {
   }, [activeConfirmStep, activeResultRecord, isHistoryOpen, isSettingsOpen, isLogsOpen, isLocationPickerOpen]);
 
   const handleSaveSettings = (newProfile: DriverProfile, newConfig: SocketConfig) => {
-    // Enforce locked IMEI strictly computed from companyCode and employeeCode
+    // Enforce locked IMEI strictly computed from LogiStep App ID 99003 + companyCode + employeeCode + serverDigits
     const lockedImei = buildFleetImei({
-      prefix: '99002',
+      prefix: '99003',
       companyCode: newProfile.companyCode,
       employeeCode: newProfile.employeeCode,
       serverDigits: newProfile.serverDigits,
@@ -329,7 +362,7 @@ export default function App() {
   }) => {
     const activeServerDigits = profile.serverDigits || '01';
     const computedImei = buildFleetImei({
-      prefix: '99002',
+      prefix: '99003',
       companyCode: credentials.companyCode,
       employeeCode: credentials.employeeCode,
       serverDigits: activeServerDigits,
@@ -370,6 +403,50 @@ export default function App() {
     addLog('INFO', 'Driver signed out.');
   };
 
+  // Sync all pending packets in device buffer
+  const handleSyncQueue = async () => {
+    if (isSyncingQueue) return;
+    setIsSyncingQueue(true);
+    addLog('INFO', `Initiating Store-and-Forward sync for buffered packets...`);
+
+    try {
+      const result = await syncAllPendingPackets({
+        tcpHost: socketConfig.tcpHost,
+        tcpPort: socketConfig.tcpPort,
+        onPacketSuccess: (packet, rxHex) => {
+          addLog('TX', `Buffered ${packet.title} [${packet.speedCode} km/h] Synced:`, packet.txLocationHex);
+          addLog('RX', `Server ACK Received:`, rxHex);
+        },
+        onPacketError: (packet, err) => {
+          addLog('ERROR', `Sync error for ${packet.title}: ${err}`);
+        },
+      });
+
+      setPendingCount(getPendingCount());
+      if (result.synced > 0) {
+        playSuccessChime();
+        triggerHapticFeedback(40);
+        showAndroidToast(`Successfully synced ${result.synced} packets to server`);
+      } else {
+        showAndroidToast(result.total === 0 ? 'Buffer is already up to date' : 'Server still offline. Packets kept safely in device buffer.');
+      }
+    } catch (e: any) {
+      addLog('ERROR', `Queue sync exception: ${e?.message}`);
+    } finally {
+      setIsSyncingQueue(false);
+    }
+  };
+
+  // Auto-sync listener when internet connection is restored (e.g. driver reaches city after remote highway)
+  useEffect(() => {
+    const handleOnline = () => {
+      addLog('INFO', 'Network connection detected. Triggering auto-sync for buffered telematics...');
+      handleSyncQueue();
+    };
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, [socketConfig]);
+
   // Transmit Trip Action Step
   const handleConfirmStep = async () => {
     if (!activeConfirmStep) return;
@@ -381,6 +458,39 @@ export default function App() {
 
     const isIgnitionOn = direction === 'UP';
     const speedCode = step.speedCode; // 101 to 110 as dictated by boss!
+
+    // Generate binary GT06 frames
+    const serialNo = Math.floor(Math.random() * 65530) + 1;
+    const loginPacket = buildLoginPacket(profile.imei, serialNo);
+    const locPacket = buildLocationPacket({
+      lat: coords.latitude,
+      lon: coords.longitude,
+      isIgnitionOn,
+      speedKmh: speedCode,
+      serialNo: (serialNo + 1) % 65535,
+      satellitesCount: 14,
+    });
+    const txLoginHex = bytesToHex(loginPacket);
+    const txLocationHex = bytesToHex(locPacket);
+
+    // 1. Stage in offline persistent queue immediately (Store-and-Forward Job 2)
+    const stagedPacket = enqueuePacket({
+      timestamp: Date.now(),
+      formattedDateTime: new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString(),
+      activityType: 'JOURNEY',
+      stepId: step.id,
+      title: lang === 'ur' ? step.titleUr : lang === 'ps' ? step.titlePs : step.titleEn,
+      speedCode,
+      direction,
+      ignition: isIgnitionOn ? 1 : 0,
+      latitude: coords.latitude,
+      longitude: coords.longitude,
+      locationName: coords.addressName || 'Karachi Depot',
+      imei: profile.imei,
+      txLoginHex,
+      txLocationHex,
+    });
+    setPendingCount(getPendingCount());
 
     addLog(
       'INFO',
@@ -439,6 +549,12 @@ export default function App() {
         addLog('INFO', `Telematics Mode [${data.mode}]: ${data.note}`);
       }
 
+      // If transmission succeeded live, mark buffered packet synced
+      if (data.success && data.mode !== 'OFFLINE_SAVED') {
+        markPacketSynced(stagedPacket.id, data.rxHex);
+      }
+      setPendingCount(getPendingCount());
+
       setConnectionStatus('SUCCESS');
 
       // Create trip record
@@ -483,6 +599,121 @@ export default function App() {
     } finally {
       setIsProcessing(false);
       setProcessingStepId(null);
+    }
+  };
+
+  // Handle logging a recurring Duty Activity (Meal, Fuel, Namaz, etc.)
+  const handleSelectDuty = async (duty: DutyActivityDefinition) => {
+    setIsProcessing(true);
+    setProcessingDutyId(duty.id);
+    setConnectionStatus('CONNECTING');
+
+    const isIgnitionOn = direction === 'UP';
+    const speedCode = duty.speedCode; // 121 to 128
+
+    const serialNo = Math.floor(Math.random() * 65530) + 1;
+    const loginPacket = buildLoginPacket(profile.imei, serialNo);
+    const locPacket = buildLocationPacket({
+      lat: coords.latitude,
+      lon: coords.longitude,
+      isIgnitionOn,
+      speedKmh: speedCode,
+      serialNo: (serialNo + 1) % 65535,
+      satellitesCount: 14,
+    });
+    const txLoginHex = bytesToHex(loginPacket);
+    const txLocationHex = bytesToHex(locPacket);
+
+    // 1. Stage in offline persistent queue
+    const stagedPacket = enqueuePacket({
+      timestamp: Date.now(),
+      formattedDateTime: new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString(),
+      activityType: 'DUTY',
+      stepId: duty.id,
+      title: lang === 'ur' ? duty.titleUr : lang === 'ps' ? duty.titlePs : duty.titleEn,
+      speedCode,
+      direction,
+      ignition: isIgnitionOn ? 1 : 0,
+      latitude: coords.latitude,
+      longitude: coords.longitude,
+      locationName: coords.addressName || 'Highway Stop',
+      imei: profile.imei,
+      txLoginHex,
+      txLocationHex,
+    });
+    setPendingCount(getPendingCount());
+
+    addLog(
+      'INFO',
+      `Duty Activity Recorded: "${duty.titleEn}" (Speed: ${speedCode} km/h, Ignition: ${isIgnitionOn ? 1 : 0})`
+    );
+
+    try {
+      // 2. Direct Native Android TCP Socket or Web proxy
+      const data = await transmitGt06Packet({
+        imei: profile.imei,
+        speedCode,
+        isIgnitionOn,
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        stepId: duty.id,
+        stepTitle: duty.titleEn,
+        tcpHost: socketConfig.tcpHost,
+        tcpPort: socketConfig.tcpPort,
+        timeoutMs: 3000,
+      });
+
+      if (data.txLoginHex) addLog('TX', `GT06 Login Packet 0x01:`, data.txLoginHex);
+      if (data.rxHex) addLog('RX', `GT06 Server ACK Received:`, data.rxHex);
+      if (data.txLocationHex) addLog('TX', `GT06 Location Packet 0x12 [Duty ${speedCode} km/h]:`, data.txLocationHex);
+
+      if (data.success && data.mode !== 'OFFLINE_SAVED') {
+        markPacketSynced(stagedPacket.id, data.rxHex);
+      }
+      setPendingCount(getPendingCount());
+
+      // Create record
+      const now = new Date();
+      const formattedDateTime = now.toLocaleDateString() + ' ' + now.toLocaleTimeString();
+
+      const newRecord: TripEventRecord = {
+        id: 'duty-' + Date.now(),
+        stepId: duty.id,
+        speedCode,
+        title: lang === 'ur' ? duty.titleUr : lang === 'ps' ? duty.titlePs : duty.titleEn,
+        direction,
+        ignition: isIgnitionOn ? 1 : 0,
+        timestamp: Date.now(),
+        formattedDateTime,
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        locationName: coords.addressName || 'Duty Stop',
+        imei: profile.imei,
+        driverName: profile.driverName,
+        vehicleNumber: profile.vehicleNumber,
+        txHex: data.txLocationHex,
+        rxHex: data.rxHex,
+        status: 'SUCCESS',
+      };
+
+      const updatedRecords = [...tripRecords, newRecord];
+      setTripRecords(updatedRecords);
+      localStorage.setItem('logistep_records', JSON.stringify(updatedRecords));
+
+      playSuccessChime();
+      triggerHapticFeedback(45);
+      showAndroidToast(
+        lang === 'ur'
+          ? `${duty.titleUr} کا اندراج ہو گیا`
+          : `${duty.titleEn} logged successfully`
+      );
+    } catch (e: any) {
+      playAlertTone();
+      addLog('ERROR', `Duty log exception: ${e?.message}`);
+      showAndroidToast('Recorded in offline device storage');
+    } finally {
+      setIsProcessing(false);
+      setProcessingDutyId(null);
     }
   };
 
@@ -620,17 +851,141 @@ export default function App() {
           lastRecord={latestRecord}
         />
 
-        {/* 10 Action Buttons Grid */}
-        <TripActionButtons
-          onSelectStep={(step) => {
-            setActiveResultRecord(null);
-            setActiveConfirmStep(step);
-          }}
-          lang={lang}
-          tripRecords={tripRecords}
-          isProcessing={isProcessing}
-          processingStepId={processingStepId}
-        />
+        {/* Offline Store-and-Forward Telematics Buffer Strip */}
+        <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-3 sm:p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md">
+          <div className="flex items-center gap-2.5">
+            <div
+              className={`p-2 rounded-xl flex items-center justify-center ${
+                pendingCount > 0
+                  ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30 animate-pulse'
+                  : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+              }`}
+            >
+              {pendingCount > 0 ? (
+                <CloudUpload className="w-4 h-4" />
+              ) : (
+                <CheckCircle2 className="w-4 h-4" />
+              )}
+            </div>
+
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-white">
+                  {lang === 'ur'
+                    ? 'آف لائن بفر اور محفوظ ترسیل'
+                    : lang === 'ps'
+                    ? 'آفلاین زېرمه او همغږي'
+                    : 'Store-and-Forward Telematics Engine'}
+                </span>
+                <span
+                  className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-md border ${
+                    pendingCount > 0
+                      ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                      : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                  }`}
+                >
+                  {pendingCount > 0
+                    ? `${pendingCount} Queued Offline`
+                    : 'Online • All Packets Synced'}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                {pendingCount > 0
+                  ? lang === 'ur'
+                    ? 'سفر کی سرگرمیاں ڈیوائس میں محفوظ ہیں۔ انٹرنیٹ ملتے ہی خودکار طور پر سرور پر منتقل ہو جائیں گی۔'
+                    : 'Packets stored safely on device. Will auto-sync to server as soon as connection is detected.'
+                  : lang === 'ur'
+                  ? 'تمام سرگرمیاں تاریخ اور وقت کے ساتھ سرور پر کامیابی سے موصول ہو چکی ہیں۔'
+                  : 'All GPS coordinates and GT06 telemetry events delivered with original timestamps.'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 sm:self-center self-end">
+            <button
+              type="button"
+              onClick={handleSyncQueue}
+              disabled={isSyncingQueue || pendingCount === 0}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${
+                pendingCount > 0
+                  ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-md shadow-amber-950/40 cursor-pointer active:scale-95'
+                  : 'bg-slate-800 text-slate-500 border border-slate-700/50 cursor-not-allowed opacity-60'
+              }`}
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isSyncingQueue ? 'animate-spin' : ''}`} />
+              <span>
+                {isSyncingQueue
+                  ? 'Syncing...'
+                  : pendingCount > 0
+                  ? `Sync Now (${pendingCount})`
+                  : 'Up to Date'}
+              </span>
+            </button>
+          </div>
+        </div>
+
+        {/* Dual Activity Segmented Switcher (Journey vs Duty) */}
+        <div className="bg-slate-900/90 p-1.5 rounded-2xl border border-slate-800 flex items-center gap-1.5 shadow-lg">
+          <button
+            type="button"
+            onClick={() => setActivityTab('journey')}
+            className={`flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-black flex items-center justify-center gap-2 transition-all cursor-pointer ${
+              activityTab === 'journey'
+                ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-slate-950 shadow-md shadow-orange-950/40'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+            }`}
+          >
+            <Compass className="w-4 h-4" />
+            <span>
+              {lang === 'ur'
+                ? 'سفری سرگرمیاں (10 مراحل)'
+                : lang === 'ps'
+                ? 'د سفر ۱۰ پړاوونه'
+                : 'Journey Activities (10 Steps)'}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActivityTab('duty')}
+            className={`flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-black flex items-center justify-center gap-2 transition-all cursor-pointer ${
+              activityTab === 'duty'
+                ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 shadow-md shadow-emerald-950/40'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+            }`}
+          >
+            <Briefcase className="w-4 h-4" />
+            <span>
+              {lang === 'ur'
+                ? 'ڈیوٹی معمولات (کھانا، ڈیزل، نماز)'
+                : lang === 'ps'
+                ? 'د دندې چارې (ډوډۍ، تېل، لمونځ)'
+                : 'Duty Activities (Meal, Fuel, Namaz)'}
+            </span>
+          </button>
+        </div>
+
+        {/* Dynamic Activity Panels based on selected tab */}
+        {activityTab === 'journey' ? (
+          <TripActionButtons
+            onSelectStep={(step) => {
+              setActiveResultRecord(null);
+              setActiveConfirmStep(step);
+            }}
+            lang={lang}
+            tripRecords={tripRecords}
+            isProcessing={isProcessing}
+            processingStepId={processingStepId}
+          />
+        ) : (
+          <DutyActionButtons
+            onSelectDuty={handleSelectDuty}
+            lang={lang}
+            tripRecords={tripRecords}
+            isProcessing={isProcessing}
+            processingDutyId={processingDutyId}
+          />
+        )}
       </main>
 
       {/* Footer */}

@@ -61,10 +61,10 @@ export const SettingsModal: React.FC<Props> = ({
   const [tcpHost, setTcpHost] = useState(socketConfig.tcpHost || 'avl.vtps.org');
   const [tcpPort, setTcpPort] = useState(socketConfig.tcpPort ? socketConfig.tcpPort.toString() : '5200');
 
-  // IMEI is locked & auto-calculated strictly from 99002 + Company Code + Employee Code + Server Digits
-  // Matches Presence App pattern (No formula breakdown shown to user)
+  // IMEI is locked & auto-calculated strictly from 99003 + Company Code + Employee Code + Server Digits
+  // LogiStep Fleet Telematics Series ID (No formula breakdown shown to user)
   const imei = buildFleetImei({
-    prefix: '99002',
+    prefix: '99003',
     companyCode: companyCode || '1001',
     employeeCode: employeeCode || '0452',
     serverDigits: serverDigits || '01',

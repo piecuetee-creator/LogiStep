@@ -96,6 +96,43 @@ export interface TripEventRecord {
   errorDetails?: string;
 }
 
+export interface DutyActivityDefinition {
+  id: number;
+  speedCode: number; // 121 to 128 for duty activities
+  titleEn: string;
+  titleUr: string;
+  titlePs: string;
+  subtitleEn: string;
+  subtitleUr: string;
+  subtitlePs: string;
+  iconName: string;
+  accentColor: string;
+  category: 'meal' | 'fuel' | 'namaz' | 'maintenance' | 'rest' | 'checkpoint';
+}
+
+export interface BufferedPacket {
+  id: string;
+  timestamp: number;
+  formattedDateTime: string;
+  activityType: 'JOURNEY' | 'DUTY';
+  stepId: number;
+  title: string;
+  speedCode: number;
+  direction: TripDirection;
+  ignition: number; // 1 or 0
+  latitude: number;
+  longitude: number;
+  locationName: string;
+  imei: string;
+  txLoginHex: string;
+  txLocationHex: string;
+  rxHex?: string;
+  status: 'PENDING' | 'SYNCED' | 'FAILED';
+  syncedAt?: string;
+  retryCount: number;
+  error?: string;
+}
+
 export interface LocationPreset {
   id: string;
   name: string;
